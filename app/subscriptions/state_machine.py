@@ -52,6 +52,7 @@ SUBSCRIPTION_TRANSITIONS: dict[SubscriptionStatus, set[SubscriptionStatus]] = {
     S.incomplete_expired: set(),
     S.canceled: set(),
     S.completed: set(),
+    S.defaulted: set(),
 }
 
 
