@@ -1,4 +1,4 @@
-# SOBSCRAP - Subscription Engine
+# orflow - Subscription Engine
 
 A robust, multi-tenant subscription billing engine built with FastAPI, SQLite (via SQLAlchemy/Alembic), Redis, and ARQ.
 
