@@ -87,7 +87,6 @@ async def test_nomba_webhook(db_session: AsyncSession):
 
     invoice = Invoice(
         tenant_id=tenant.id,
-        project_id=project.id,
         customer_id=customer.id,
         status=InvoiceStatus.open,
         amount_due=1000,

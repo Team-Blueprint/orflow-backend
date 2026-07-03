@@ -33,9 +33,8 @@ from app.tenants.schemas import (
     SignupRequest,
     SignupResponse,
     TenantRead,
-    TokenPair,
 )
-from app.tenants.service import TenantService, verify_access_token, verify_refresh_token
+from app.tenants.service import TenantService, verify_access_token
 from app.core.exceptions import ErrorResponse
 from app.core.cookies import set_auth_cookies, clear_auth_cookies
 

@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.plans.models import Plan, PlanInterval
@@ -87,7 +87,6 @@ async def _seed(session: AsyncSession, *, sub_status, period_end, with_token=Tru
 
     sub = Subscription(
         tenant_id=tenant.id,
-        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,
@@ -129,7 +128,6 @@ async def test_first_failure_opens_dunning_and_schedules_retry(db_session: Async
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
-        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -141,7 +139,6 @@ async def test_first_failure_opens_dunning_and_schedules_retry(db_session: Async
     await db_session.refresh(invoice)
 
     token = current_tenant_id.set(sub.tenant_id)
-    proj_token = current_project_id.set(project.id)
     try:
         await open_or_advance_dunning(
             db_session,
@@ -151,7 +148,6 @@ async def test_first_failure_opens_dunning_and_schedules_retry(db_session: Async
         )
     finally:
         current_tenant_id.reset(token)
-        current_project_id.reset(proj_token)
 
     await db_session.refresh(sub)
     await db_session.refresh(invoice)
@@ -171,7 +167,6 @@ async def test_expired_card_flags_without_retry_or_unpaid(db_session: AsyncSessi
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
-        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -182,7 +177,6 @@ async def test_expired_card_flags_without_retry_or_unpaid(db_session: AsyncSessi
     await db_session.commit()
 
     token = current_tenant_id.set(sub.tenant_id)
-    proj_token = current_project_id.set(project.id)
     try:
         await open_or_advance_dunning(
             db_session,
@@ -192,7 +186,6 @@ async def test_expired_card_flags_without_retry_or_unpaid(db_session: AsyncSessi
         )
     finally:
         current_tenant_id.reset(token)
-        current_project_id.reset(proj_token)
 
     await db_session.refresh(sub)
     await db_session.refresh(invoice)
@@ -215,7 +208,6 @@ async def test_dunning_retry_recovers_subscription(db_session: AsyncSession, mon
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
-        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -259,7 +251,6 @@ async def test_dunning_exhaustion_transitions_to_unpaid(db_session: AsyncSession
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
-        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,

@@ -13,7 +13,6 @@ class PlanService(BaseRepository[Plan]):
         super().__init__(Plan, session)
 
     async def list_active(self) -> list[Plan]:
-        from sqlalchemy import select
 
         result = await self.session.execute(
             self._base_query().where(Plan.status == PlanStatus.active)

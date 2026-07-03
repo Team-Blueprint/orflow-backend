@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from app.audit.models import AuditEntityType, AuditLog
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.core.exceptions import InvalidStateTransition
 from app.invoices.models import Invoice, InvoiceStatus
 from app.invoices.state_machine import (
@@ -21,10 +21,9 @@ I = InvoiceStatus
 TERMINAL = {I.paid, I.void, I.uncollectible}
 
 
-async def _make_invoice(session, status: I = I.draft, *, project_id: uuid.UUID | None = None) -> Invoice:
+async def _make_invoice(session, status: I = I.draft) -> Invoice:
     inv = Invoice(
         tenant_id=uuid.uuid4(),
-        project_id=project_id or uuid.uuid4(),
         customer_id=uuid.uuid4(),
         subscription_id=uuid.uuid4(),
         status=status,

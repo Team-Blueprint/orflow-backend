@@ -10,7 +10,6 @@ from typing import Any, Dict
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
 from app.webhooks.models import WebhookEndpoint, OutboundWebhookEvent, WebhookDeliveryAttempt, OutboundEventStatus
@@ -36,7 +35,7 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
     """
     Arq worker job to expire a subscription if it remains incomplete (first invoice unpaid).
     """
-    from app.core.context import current_project_id, current_tenant_id
+    from app.core.context import current_tenant_id
     from app.subscriptions.models import Subscription, SubscriptionStatus
     from app.subscriptions.state_machine import transition_subscription
     
@@ -49,7 +48,6 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
             return
 
         token = current_tenant_id.set(sub.tenant_id)
-        proj_token = current_project_id.set(sub.project_id)
         try:
             await transition_subscription(session, sub, SubscriptionStatus.incomplete_expired, actor="expiry_worker")
             logger.info("Successfully expired incomplete subscription %s.", subscription_id)
@@ -58,12 +56,8 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
             await session.rollback()
         finally:
             current_tenant_id.reset(token)
-            current_project_id.reset(proj_token)
 
 async def schedule_trial_activation(subscription_id: uuid.UUID, run_at: datetime):
-    """
-    Schedule a worker job to activate a trialing subscription at the end of the trial period.
-    """
     pool = await get_arq_pool()
     await pool.enqueue_job(
         'activate_trial_subscription_job', 
@@ -72,12 +66,7 @@ async def schedule_trial_activation(subscription_id: uuid.UUID, run_at: datetime
     )
 
 async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: uuid.UUID):
-    """
-    Arq worker job to activate a subscription at the end of its trial period.
-    Transitions the subscription to active if it has a valid payment method,
-    or to paused if it doesn't.
-    """
-    from app.core.context import current_project_id, current_tenant_id
+    from app.core.context import current_tenant_id
     from app.subscriptions.models import Subscription, SubscriptionStatus
     from app.subscriptions.state_machine import transition_subscription
     from app.payment_methods.service import PaymentMethodService
@@ -92,19 +81,15 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
             return
 
         token = current_tenant_id.set(sub.tenant_id)
-        proj_token = current_project_id.set(sub.project_id)
         try:
-            # Check for valid payment method
             pm_svc = PaymentMethodService(session)
             payment_method = None
             if sub.payment_method_id:
                 payment_method = await pm_svc.get(sub.payment_method_id)
 
             if payment_method and payment_method.provider_token:
-                # Transition to active, reset current period dates so billing cycle picks it up immediately
                 await transition_subscription(session, sub, SubscriptionStatus.active, actor="trial_worker")
                 
-                # Emit events
                 await enqueue_webhook_event(
                     session,
                     tenant_id=sub.tenant_id,
@@ -119,10 +104,8 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
                 )
                 logger.info("Successfully transitioned subscription %s to active.", subscription_id)
             else:
-                # Invalid or missing payment method, transition to paused
                 await transition_subscription(session, sub, SubscriptionStatus.paused, actor="trial_worker")
                 
-                # Emit events
                 await enqueue_webhook_event(
                     session,
                     tenant_id=sub.tenant_id,
@@ -142,7 +125,6 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
             await session.rollback()
         finally:
             current_tenant_id.reset(token)
-            current_project_id.reset(proj_token)
 
 async def enqueue_webhook_delivery(event_id: uuid.UUID):
     """

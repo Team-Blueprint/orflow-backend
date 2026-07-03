@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.invoices.models import Invoice, InvoiceStatus
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
 from httpx._transports.asgi import ASGITransport
@@ -182,12 +182,10 @@ async def test_process_due_installment_invoices(
     from app.subscriptions.state_machine import transition_subscription
     sub = await db_session.get(Subscription, uuid.UUID(sub_id))
     token = current_tenant_id.set(sub.tenant_id)
-    proj_token = current_project_id.set(sub.project_id)
     try:
         await transition_subscription(db_session, sub, SubscriptionStatus.active)
     finally:
         current_tenant_id.reset(token)
-        current_project_id.reset(proj_token)
     
     invoices[0].status = InvoiceStatus.paid
     
@@ -235,12 +233,10 @@ async def test_installment_completion(
     from app.subscriptions.state_machine import transition_subscription
     sub = await db_session.get(Subscription, sub_id)
     token = current_tenant_id.set(sub.tenant_id)
-    proj_token = current_project_id.set(sub.project_id)
     try:
         await transition_subscription(db_session, sub, SubscriptionStatus.active)
     finally:
         current_tenant_id.reset(token)
-        current_project_id.reset(proj_token)
     
     # Pay all but one
     for inv in invoices[:-1]:
@@ -250,12 +246,10 @@ async def test_installment_completion(
     # Use transition_invoice for the last one to trigger completion logic
     from app.invoices.state_machine import transition_invoice
     token = current_tenant_id.set(sub.tenant_id)
-    proj_token = current_project_id.set(sub.project_id)
     try:
         await transition_invoice(db_session, invoices[-1], InvoiceStatus.paid)
     finally:
         current_tenant_id.reset(token)
-        current_project_id.reset(proj_token)
     
     # Verify subscription is completed
     sub = await db_session.get(Subscription, sub_id)

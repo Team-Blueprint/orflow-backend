@@ -23,7 +23,6 @@ TERMINAL = {S.incomplete_expired, S.canceled, S.completed}
 async def _make_subscription(session, status: S = S.incomplete) -> Subscription:
     sub = Subscription(
         tenant_id=uuid.uuid4(),
-        project_id=uuid.uuid4(),
         customer_id=uuid.uuid4(),
         plan_id=uuid.uuid4(),
         status=status,

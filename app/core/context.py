@@ -4,7 +4,6 @@ These are set by middleware early in the request lifecycle and consumed by
 downstream code (repositories, services, logging) without passing values
 through every function signature.
 """
-import uuid
 from contextvars import ContextVar
 from uuid import UUID
 

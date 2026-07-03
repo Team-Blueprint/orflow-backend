@@ -62,7 +62,6 @@ async def test_billing_cycle_success(db_session: AsyncSession):
     now = datetime.now(timezone.utc)
     sub = Subscription(
         tenant_id=tenant.id,
-        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,
@@ -124,7 +123,6 @@ async def test_billing_cycle_failure(db_session: AsyncSession):
     now = datetime.now(timezone.utc)
     sub = Subscription(
         tenant_id=tenant.id,
-        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,

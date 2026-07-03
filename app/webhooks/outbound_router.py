@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_async_db
 from app.core.context import current_tenant_id, current_key_type
-from app.core.deps import _require_project
 from app.webhooks import outbound_service
 from app.webhooks.schemas import (
     WebhookEndpointCreate,
@@ -14,7 +13,7 @@ from app.webhooks.schemas import (
     WebhookDeliveryAttemptRead,
     EventCatalogRead
 )
-from app.core.exceptions import EntityNotFoundError, ErrorResponse
+from app.core.exceptions import EntityNotFoundError
 
 router = APIRouter(prefix="/webhooks", tags=["Outbound Webhooks"])
 
@@ -35,14 +34,13 @@ def require_tenant() -> uuid.UUID:
 async def create_endpoint(
     endpoint_in: WebhookEndpointCreate,
     tenant_id: uuid.UUID = Depends(require_tenant),
-    project=Depends(_require_project),
     session: AsyncSession = Depends(get_async_db)
 ):
     """Register a new webhook endpoint.
     
     Creates a new destination URL that will receive HTTP POST requests for outbound events.
     """
-    return await outbound_service.create_webhook_endpoint(session, tenant_id, project.id, endpoint_in)
+    return await outbound_service.create_webhook_endpoint(session, tenant_id, endpoint_in)
 
 @router.get("/endpoints/all", response_model=List[WebhookEndpointRead])
 async def list_endpoints(

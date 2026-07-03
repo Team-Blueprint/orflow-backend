@@ -1,4 +1,3 @@
-import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.customers.models import Customer
 from app.db.repository import BaseRepository
@@ -14,7 +13,6 @@ class CustomerService(BaseRepository[Customer]):
         super().__init__(Customer, session)
 
     async def get_by_email(self, email: str) -> Customer | None:
-        from sqlalchemy import select
 
         result = await self.session.execute(
             self._base_query().where(Customer.email == email)

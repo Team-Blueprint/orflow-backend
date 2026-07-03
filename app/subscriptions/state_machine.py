@@ -86,7 +86,6 @@ async def transition_subscription(
         entity_type=AuditEntityType.subscription,
         entity_id=subscription.id,
         tenant_id=subscription.tenant_id,
-        project_id=subscription.project_id,
         old_status=old_status.value,
         new_status=new_status.value,
         reason=reason,

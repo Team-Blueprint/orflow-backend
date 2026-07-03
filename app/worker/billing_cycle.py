@@ -4,10 +4,9 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.db.database import AsyncSessionLocal
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
-from app.subscriptions.state_machine import transition_subscription
 from app.plans.service import PlanService
 from app.customers.service import CustomerService
 from app.payment_methods.service import PaymentMethodService
@@ -47,7 +46,6 @@ async def process_billing_cycle(ctx: dict[str, Any]) -> None:
         for sub in subscriptions:
             # Enforce tenant isolation for the repository services
             token = current_tenant_id.set(sub.tenant_id)
-            proj_token = current_project_id.set(sub.project_id)
             try:
                 plan_svc = PlanService(session)
                 plan = await plan_svc.get(sub.plan_id)
@@ -118,7 +116,6 @@ async def process_billing_cycle(ctx: dict[str, Any]) -> None:
                 
                 attempt = PaymentAttempt(
                     tenant_id=invoice.tenant_id,
-                    project_id=invoice.project_id,
                     invoice_id=invoice.id,
                     status=charge_result.status,
                     failure_reason=charge_result.failure_reason,
@@ -157,4 +154,3 @@ async def process_billing_cycle(ctx: dict[str, Any]) -> None:
                 await session.rollback()
             finally:
                 current_tenant_id.reset(token)
-                current_project_id.reset(proj_token)

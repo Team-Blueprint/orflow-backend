@@ -1,8 +1,7 @@
 import uuid
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repository import BaseRepository
-from app.payment_methods.models import PaymentMethod, PaymentMethodStatus
+from app.payment_methods.models import PaymentMethod
 
 
 class PaymentMethodService(BaseRepository[PaymentMethod]):

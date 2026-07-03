@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_async_db
@@ -16,12 +16,11 @@ from app.subscriptions.schemas import (
 )
 from app.subscriptions.service import SubscriptionService
 
-from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
 
 
-router = APIRouter(prefix="/subscriptions", tags=["subscriptions"], dependencies=[Depends(_require_project)])
+router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 @router.post(
     "/create", 
@@ -134,7 +133,6 @@ async def get_audit_log(
 ):
     from sqlalchemy import select
     from app.audit.models import AuditLog, AuditEntityType
-    from app.subscriptions.models import Subscription
 
     # verify sub exists
     svc = SubscriptionService(session)

@@ -13,7 +13,6 @@ from app.reconciliation.models import (
 from app.reconciliation.schemas import ReconciliationRunSummary
 from app.providers.base import PaymentProviderAdapter, PaymentStatus, ProviderError
 from app.webhooks.models import PaymentAttempt
-from app.invoices.models import Invoice
 
 logger = logging.getLogger(__name__)
 

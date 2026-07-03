@@ -21,7 +21,7 @@ def record_transition(
     entity_type: AuditEntityType,
     entity_id: uuid.UUID,
     tenant_id: uuid.UUID,
-    project_id: uuid.UUID,
+    project_id: uuid.UUID | None = None,
     old_status: str | None,
     new_status: str | None,
     reason: str | None = None,

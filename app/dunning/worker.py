@@ -25,7 +25,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.customers.models import Customer
 from app.db.database import AsyncSessionLocal
 from app.dunning.service import clear_dunning, open_or_advance_dunning
@@ -59,7 +59,6 @@ async def process_dunning_retries(ctx: dict[str, Any]) -> None:
 
         for invoice in invoices:
             token = current_tenant_id.set(invoice.tenant_id)
-            proj_token = current_project_id.set(invoice.project_id)
             try:
                 await _retry_invoice(session, provider, invoice)
             except Exception as exc:  # noqa: BLE001 — isolate one bad invoice
@@ -67,7 +66,6 @@ async def process_dunning_retries(ctx: dict[str, Any]) -> None:
                 await session.rollback()
             finally:
                 current_tenant_id.reset(token)
-                current_project_id.reset(proj_token)
 
 
 async def _retry_invoice(session, provider, invoice: Invoice) -> None:
@@ -115,7 +113,6 @@ async def _retry_invoice(session, provider, invoice: Invoice) -> None:
 
     attempt = PaymentAttempt(
         tenant_id=invoice.tenant_id,
-        project_id=invoice.project_id,
         invoice_id=invoice.id,
         status=charge_result.status,
         failure_reason=charge_result.failure_reason,
@@ -185,7 +182,6 @@ async def process_unpaid_grace(ctx: dict[str, Any]) -> None:
 
         for subscription in subscriptions:
             token = current_tenant_id.set(subscription.tenant_id)
-            proj_token = current_project_id.set(subscription.project_id)
             try:
                 from app.subscriptions.models import SubscriptionType
                 target_status = (
@@ -211,4 +207,3 @@ async def process_unpaid_grace(ctx: dict[str, Any]) -> None:
                 await session.rollback()
             finally:
                 current_tenant_id.reset(token)
-                current_project_id.reset(proj_token)

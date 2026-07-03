@@ -3,9 +3,8 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_tenant_id
 from app.db.database import AsyncSessionLocal
 from app.invoices.models import Invoice, InvoiceStatus
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
@@ -50,7 +49,6 @@ async def process_due_installment_invoices(ctx: Dict[str, Any]):
 
         for invoice, subscription in rows:
             token = current_tenant_id.set(invoice.tenant_id)
-            proj_token = current_project_id.set(invoice.project_id)
             try:
                 payment_method = None
                 if subscription.payment_method_id:
@@ -89,7 +87,6 @@ async def process_due_installment_invoices(ctx: Dict[str, Any]):
 
                 attempt = PaymentAttempt(
                     tenant_id=invoice.tenant_id,
-                    project_id=invoice.project_id,
                     invoice_id=invoice.id,
                     status=charge_result.status,
                     failure_reason=charge_result.failure_reason,
@@ -115,6 +112,5 @@ async def process_due_installment_invoices(ctx: Dict[str, Any]):
                     )
             finally:
                 current_tenant_id.reset(token)
-                current_project_id.reset(proj_token)
                 
     logger.info("Finished process_due_installment_invoices.")

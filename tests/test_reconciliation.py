@@ -39,7 +39,6 @@ _RANGE_START = datetime(2026, 6, 30, tzinfo=timezone.utc)
 async def _seed_attempt(
     db: AsyncSession,
     tenant_id: uuid.UUID,
-    project_id: uuid.UUID,
     customer_id: uuid.UUID,
     provider_reference: str,
     status: PaymentStatus = PaymentStatus.success,
@@ -48,7 +47,6 @@ async def _seed_attempt(
 ) -> tuple[Invoice, PaymentAttempt]:
     invoice = Invoice(
         tenant_id=tenant_id,
-        project_id=project_id,
         customer_id=customer_id,
         status=InvoiceStatus.paid,
         amount_due=amount_due,
@@ -60,7 +58,6 @@ async def _seed_attempt(
 
     attempt = PaymentAttempt(
         tenant_id=tenant_id,
-        project_id=project_id,
         invoice_id=invoice.id,
         status=status,
         provider_reference=provider_reference,
@@ -114,7 +111,7 @@ async def test_missing_in_nomba(db_session: AsyncSession, provider):
     db_session.add(customer)
     await db_session.flush()
 
-    await _seed_attempt(db_session, tenant.id, project.id, customer.id, "ref-1")
+    await _seed_attempt(db_session, tenant.id, customer.id, "ref-1")
 
     service = ReconciliationService()
     date_from = _RANGE_START
@@ -148,7 +145,7 @@ async def test_status_mismatch(db_session: AsyncSession, provider):
     db_session.add(customer)
     await db_session.flush()
 
-    await _seed_attempt(db_session, tenant.id, project.id, customer.id, "ref-2", status=PaymentStatus.success)
+    await _seed_attempt(db_session, tenant.id, customer.id, "ref-2", status=PaymentStatus.success)
 
     service = ReconciliationService()
     date_from = _RANGE_START
@@ -179,7 +176,7 @@ async def test_amount_mismatch(db_session: AsyncSession, provider):
     db_session.add(customer)
     await db_session.flush()
 
-    await _seed_attempt(db_session, tenant.id, project.id, customer.id, "ref-3", amount_due=5000)
+    await _seed_attempt(db_session, tenant.id, customer.id, "ref-3", amount_due=5000)
 
     service = ReconciliationService()
     date_from = _RANGE_START
@@ -210,7 +207,7 @@ async def test_perfect_match_no_discrepancies(db_session: AsyncSession, provider
     db_session.add(customer)
     await db_session.flush()
 
-    await _seed_attempt(db_session, tenant.id, project.id, customer.id, "ref-4", amount_due=5000)
+    await _seed_attempt(db_session, tenant.id, customer.id, "ref-4", amount_due=5000)
 
     service = ReconciliationService()
     date_from = _RANGE_START
@@ -274,8 +271,8 @@ async def test_tenant_ids_filter(db_session: AsyncSession, provider):
     db_session.add_all([c1, c2])
     await db_session.flush()
 
-    await _seed_attempt(db_session, t1.id, p1.id, c1.id, "ref-t1")
-    await _seed_attempt(db_session, t2.id, p2.id, c2.id, "ref-t2")
+    await _seed_attempt(db_session, t1.id, c1.id, "ref-t1")
+    await _seed_attempt(db_session, t2.id, c2.id, "ref-t2")
 
     service = ReconciliationService()
     date_from = _RANGE_START

@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import Request, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.core.config import settings
 
 
 # Double-submit pattern protection
