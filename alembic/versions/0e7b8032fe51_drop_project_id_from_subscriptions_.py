@@ -21,7 +21,7 @@ def upgrade() -> None:
         batch_op.alter_column('project_id',
                nullable=True)
         batch_op.drop_constraint(batch_op.f('fk_audit_logs_project_id'), type_='foreignkey')
-        batch_op.create_foreign_key(None, 'projects', ['project_id'], ['id'], ondelete='SET NULL')
+        batch_op.create_foreign_key('fk_audit_logs_project_id', 'projects', ['project_id'], ['id'], ondelete='SET NULL')
 
     with op.batch_alter_table('invoice_line_items', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_invoice_line_items_project_id'))
@@ -47,7 +47,7 @@ def upgrade() -> None:
         batch_op.alter_column('project_id',
                nullable=True)
         batch_op.drop_constraint(batch_op.f('fk_plans_project_id'), type_='foreignkey')
-        batch_op.create_foreign_key(None, 'projects', ['project_id'], ['id'], ondelete='SET NULL')
+        batch_op.create_foreign_key('fk_plans_project_id', 'projects', ['project_id'], ['id'], ondelete='SET NULL')
 
     with op.batch_alter_table('subscriptions', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_subscriptions_project_id'))
@@ -76,7 +76,7 @@ def downgrade() -> None:
         batch_op.create_index(batch_op.f('ix_subscriptions_project_id'), ['project_id'], unique=False)
 
     with op.batch_alter_table('plans', schema=None) as batch_op:
-        batch_op.drop_constraint(None, type_='foreignkey')
+        batch_op.drop_constraint('fk_plans_project_id', type_='foreignkey')
         batch_op.create_foreign_key(batch_op.f('fk_plans_project_id'), 'projects', ['project_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('project_id',
                nullable=False)
@@ -102,7 +102,7 @@ def downgrade() -> None:
         batch_op.create_index(batch_op.f('ix_invoice_line_items_project_id'), ['project_id'], unique=False)
 
     with op.batch_alter_table('audit_logs', schema=None) as batch_op:
-        batch_op.drop_constraint(None, type_='foreignkey')
+        batch_op.drop_constraint('fk_audit_logs_project_id', type_='foreignkey')
         batch_op.create_foreign_key(batch_op.f('fk_audit_logs_project_id'), 'projects', ['project_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('project_id',
                nullable=False)
