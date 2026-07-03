@@ -14,7 +14,7 @@ CookieName = Literal["access_token", "refresh_token", "csrf_token"]
 _COOKIE_PATHS: dict[CookieName, str] = {
     "access_token": "/v1",
     "refresh_token": "/v1/auth/refresh",
-    "csrf_token": "/v1",
+    "csrf_token": "/",
 }
 
 
