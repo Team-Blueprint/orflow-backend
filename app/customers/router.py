@@ -6,10 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.customers.schemas import CustomerCreate, CustomerRead, CustomerUpdate
 from app.customers.service import CustomerService
 from app.db.database import get_async_db
-from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
-router = APIRouter(prefix="/customers", tags=["customers"], dependencies=[Depends(_require_project)])
+router = APIRouter(prefix="/customers", tags=["customers"])
 
 @router.post(
     "/create", 

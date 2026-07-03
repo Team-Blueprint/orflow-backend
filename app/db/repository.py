@@ -38,7 +38,7 @@ class BaseRepository(Generic[ModelT]):
             self.model.tenant_id == self._tenant_id()  # type: ignore[attr-defined]
         )
         project_id = self._project_id()
-        if project_id is not None and hasattr(self.model, "project_id"):
+        if project_id is not None and hasattr(self.model, "project_id") and getattr(self.model, "__project_scoped__", True):
             query = query.where(self.model.project_id == project_id)  # type: ignore[attr-defined]
         return query
 
@@ -61,7 +61,7 @@ class BaseRepository(Generic[ModelT]):
 
     async def create(self, **kwargs) -> ModelT:
         kwargs.setdefault("tenant_id", self._tenant_id())
-        if hasattr(self.model, "project_id") and "project_id" not in kwargs:
+        if hasattr(self.model, "project_id") and "project_id" not in kwargs and getattr(self.model, "__project_scoped__", True):
             project_id = self._project_id()
             if project_id is not None:
                 kwargs["project_id"] = project_id

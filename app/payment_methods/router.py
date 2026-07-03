@@ -10,10 +10,9 @@ from app.payment_methods.schemas import (
     PaymentMethodUpdate,
 )
 from app.payment_methods.service import PaymentMethodService
-from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
-router = APIRouter(prefix="/payment-methods", tags=["payment_methods"], dependencies=[Depends(_require_project)])
+router = APIRouter(prefix="/payment-methods", tags=["payment_methods"])
 
 @router.post(
     "/create", 

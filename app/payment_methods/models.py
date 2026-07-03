@@ -31,7 +31,8 @@ class PaymentMethod(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
-    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    __project_scoped__ = False
     customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     type: Mapped[PaymentMethodType] = mapped_column(Enum(PaymentMethodType, native_enum=False), nullable=False)
     status: Mapped[PaymentMethodStatus] = mapped_column(Enum(PaymentMethodStatus, native_enum=False), default=PaymentMethodStatus.active, nullable=False,)
