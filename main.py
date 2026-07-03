@@ -62,7 +62,7 @@ app.add_middleware(
     allow_origins=_parse_cors_origins(settings.CORS_ORIGINS),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Project-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Project-ID", "X-API-Key"],
 )
 
 app.add_middleware(IdempotencyMiddleware)
