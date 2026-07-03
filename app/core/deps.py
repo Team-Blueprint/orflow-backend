@@ -3,7 +3,7 @@
 import uuid
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,13 +64,14 @@ async def _require_project(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
     tenant_id: uuid.UUID = Depends(_require_tenant),
+    x_project_id: str | None = Header(None, alias="X-Project-ID"),
 ):
     """Validate X-Project-ID header and set current_project_id context var.
 
     Must be used on all project-scoped resource endpoints.
     The project must belong to the authenticated tenant.
     """
-    project_id_str = request.headers.get("X-Project-ID")
+    project_id_str = x_project_id
     if project_id_str is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
