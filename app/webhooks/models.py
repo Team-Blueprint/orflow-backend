@@ -38,7 +38,7 @@ class PaymentAttempt(Base):
     status: Mapped[PaymentStatus] = mapped_column(Enum(PaymentStatus, native_enum=False), nullable=False)
     failure_reason: Mapped[FailureReason | None] = mapped_column(Enum(FailureReason, native_enum=False), nullable=True)
 
-    # Dunning (Section 8): the original charge is attempt 0; each scheduled
+    # Dunning : the original charge is attempt 0; each scheduled
     # retry is a separate row with an incrementing number and ``is_retry=True``.
     attempt_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_retry: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

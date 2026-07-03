@@ -1,4 +1,4 @@
-"""Dunning orchestration (Section 8).
+"""Dunning orchestration .
 
 This module owns what happens *after* a charge fails: opening the dunning
 cycle, scheduling retries per :mod:`app.dunning.policy`, and ultimately

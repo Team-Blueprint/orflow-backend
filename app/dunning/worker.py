@@ -1,4 +1,4 @@
-"""Dunning workers (Section 8).
+"""Dunning workers .
 
 Two poll-based Arq cron jobs, mirroring the billing-cycle worker's shape:
 

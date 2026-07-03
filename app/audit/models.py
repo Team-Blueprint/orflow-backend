@@ -20,7 +20,6 @@ class AuditLog(Base):
 
     Every call to ``transition_subscription`` / ``transition_invoice`` writes one
     row here. This is the trail that demonstrates state-machine completeness
-    (surfaced over HTTP in Section 13).
     """
 
     __tablename__ = "audit_logs"

@@ -1,11 +1,10 @@
-"""Proration calculator (Section 10).
+"""Proration calculator.
 
-A pure, side-effect-free computation of what a mid-cycle plan change costs. No
+A pure computation of what a mid-cycle plan change costs. No
 DB, no HTTP — just arithmetic over two plans and how much of the current cycle
-is left. This is deliberately isolated so the edge cases (day 1, mid-cycle,
-last day, upgrade vs downgrade) can be unit-tested exhaustively.
+is left. 
 
-Model: time-based proration, like Stripe. The customer is credited for the
+Model: time-based proration . The customer is credited for the
 unused portion of the *old* plan and charged for the remaining portion of the
 *new* plan, both pro-rated by the same ``days_remaining / total_days`` fraction.
 The net is what we actually collect; the two halves are surfaced as explicit
@@ -13,11 +12,6 @@ line items so the invoice reads as
 "credit for unused time on Plan A + charge for remaining time on Plan B" —
 never a silent balance adjustment.
 
-Note on the signature: the build plan sketches
-``calculate_proration(old_plan, new_plan, days_remaining_in_cycle)``. Computing a
-fraction needs the cycle length too (a month is not a fixed number of days), so
-``total_days_in_cycle`` is passed explicitly — the caller derives it from the
-subscription's actual ``current_period_start``/``current_period_end``.
 """
 
 from __future__ import annotations

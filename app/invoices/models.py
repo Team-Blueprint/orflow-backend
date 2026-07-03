@@ -47,12 +47,12 @@ class Invoice(Base):
 
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    # --- Dunning / failed-payment recovery (Section 8) ---
+    # --- Dunning / failed-payment recovery  ---
     # When set, a retry is scheduled: the billing/dunning worker re-attempts the
     # charge once ``next_retry_at <= now``. Cleared on recovery or exhaustion.
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
-    # The FailureReason that *opened* the dunning cycle. It anchors the whole
-    # retry schedule (see app.dunning.policy) even if later attempts decline for
+    # The FailureReason that opened the dunning cycle. It anchors the whole
+    # retry schedule  even if later attempts decline for
     # a different reason, and flags reasons that need a new payment method.
     dunning_failure_reason: Mapped[FailureReason | None] = mapped_column(
         Enum(FailureReason, native_enum=False), nullable=True
@@ -64,7 +64,7 @@ class Invoice(Base):
 
 class InvoiceLineItem(Base):
     """
-    An explicit, auditable line on an invoice (Section 10: proration).
+    An explicit, auditable line on an invoice .
 
     A proration invoice carries two of these — a negative credit for the unused
     old plan and a positive charge for the remaining new plan — so the change is
