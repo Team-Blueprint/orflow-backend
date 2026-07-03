@@ -113,28 +113,36 @@ class SubscriptionService(BaseRepository[Subscription]):
             for i in range(invoices_to_create):
                 # Calculate period and due date
                 delta_kwargs = {}
-                if plan.interval == PlanInterval.day:
+                if plan.interval == PlanInterval.daily:
                     delta_kwargs = {"days": i * plan.interval_count}
-                elif plan.interval == PlanInterval.week:
+                elif plan.interval == PlanInterval.weekly:
                     delta_kwargs = {"weeks": i * plan.interval_count}
-                elif plan.interval == PlanInterval.month:
+                elif plan.interval == PlanInterval.monthly:
                     delta_kwargs = {"months": i * plan.interval_count}
-                elif plan.interval == PlanInterval.year:
+                elif plan.interval == PlanInterval.quarterly:
+                    delta_kwargs = {"months": 3 * i * plan.interval_count}
+                elif plan.interval in (PlanInterval.yearly, PlanInterval.annually):
                     delta_kwargs = {"years": i * plan.interval_count}
+                elif plan.interval == PlanInterval.biannually:
+                    delta_kwargs = {"months": 6 * i * plan.interval_count}
                     
                 delta = relativedelta(**delta_kwargs)
                 due_date = now + delta
                 
                 # Period end is due_date + 1 interval
                 next_delta_kwargs = {}
-                if plan.interval == PlanInterval.day:
+                if plan.interval == PlanInterval.daily:
                     next_delta_kwargs = {"days": (i + 1) * plan.interval_count}
-                elif plan.interval == PlanInterval.week:
+                elif plan.interval == PlanInterval.weekly:
                     next_delta_kwargs = {"weeks": (i + 1) * plan.interval_count}
-                elif plan.interval == PlanInterval.month:
+                elif plan.interval == PlanInterval.monthly:
                     next_delta_kwargs = {"months": (i + 1) * plan.interval_count}
-                elif plan.interval == PlanInterval.year:
+                elif plan.interval == PlanInterval.quarterly:
+                    next_delta_kwargs = {"months": 3 * (i + 1) * plan.interval_count}
+                elif plan.interval in (PlanInterval.yearly, PlanInterval.annually):
                     next_delta_kwargs = {"years": (i + 1) * plan.interval_count}
+                elif plan.interval == PlanInterval.biannually:
+                    next_delta_kwargs = {"months": 6 * (i + 1) * plan.interval_count}
                 next_delta = relativedelta(**next_delta_kwargs)
                 period_end = now + next_delta
                 
