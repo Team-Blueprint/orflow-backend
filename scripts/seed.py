@@ -26,7 +26,7 @@ PLANS_TEMPLATE = [
         "name": "Starter",
         "amount": 999,       # $9.99
         "currency": "USD",
-        "interval": PlanInterval.month,
+        "interval": PlanInterval.monthly,
         "interval_count": 1,
         "trial_period_days": 14,
     },
@@ -34,7 +34,7 @@ PLANS_TEMPLATE = [
         "name": "Pro",
         "amount": 2999,      # $29.99
         "currency": "USD",
-        "interval": PlanInterval.month,
+        "interval": PlanInterval.monthly,
         "interval_count": 1,
         "trial_period_days": None,
     },
@@ -42,7 +42,7 @@ PLANS_TEMPLATE = [
         "name": "Enterprise Annual",
         "amount": 99900,     # $999.00
         "currency": "USD",
-        "interval": PlanInterval.year,
+        "interval": PlanInterval.yearly,
         "interval_count": 1,
         "trial_period_days": None,
     },
