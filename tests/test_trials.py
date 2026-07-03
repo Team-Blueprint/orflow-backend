@@ -101,7 +101,7 @@ async def trial_plan(auth_client: AsyncClient, auth_headers: dict):
         "/v1/plans/create",
         json={
             "name": "Trial Plan",
-            "amount": 1000, 
+            "amount": 10.0, 
             "currency": "USD",
             "interval": "monthly",
             "interval_count": 1,

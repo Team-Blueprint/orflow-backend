@@ -1,14 +1,15 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.plans.models import PlanInterval, PlanStatus
 
 
 class PlanCreate(BaseModel):
     name: str
-    amount: int  # in smallest currency unit (e.g. cents)
+    amount: Decimal  # in major currency unit (e.g. 10.00 for $10 or ₦10)
     currency: str
     interval: PlanInterval
     interval_count: int = 1
@@ -27,7 +28,7 @@ class PlanRead(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     name: str
-    amount: int
+    amount: Decimal  # in major currency unit (e.g. 10.00 for $10 or ₦10)
     currency: str
     interval: PlanInterval
     interval_count: int
@@ -38,3 +39,11 @@ class PlanRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def convert_to_major(cls, v):
+        """Convert stored minor-unit int (kobo/cents) to major-unit Decimal."""
+        if isinstance(v, int):
+            return Decimal(v) / Decimal(100)
+        return v

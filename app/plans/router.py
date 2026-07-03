@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,10 @@ async def create_plan(
     db: AsyncSession = Depends(get_async_db),
 ):
     service = PlanService(db)
-    return await service.create(**payload.model_dump())
+    data = payload.model_dump()
+    # Convert major-unit input (e.g. naira) to minor-unit storage (kobo)
+    data["amount"] = int(Decimal(str(data["amount"])) * Decimal(100))
+    return await service.create(**data)
 
 @router.get(
     "/list", 

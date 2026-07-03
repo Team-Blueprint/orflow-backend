@@ -100,7 +100,7 @@ async def installment_plan(auth_client: AsyncClient, auth_headers: dict):
         "/v1/plans/create",
         json={
             "name": "4 Month Installment",
-            "amount": 25000, # $250
+            "amount": 250.0, # $250
             "currency": "USD",
             "interval": "monthly",
             "interval_count": 1,
