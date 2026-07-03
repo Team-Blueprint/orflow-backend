@@ -8,10 +8,13 @@ from app.db.base import Base
 
 
 class PlanInterval(str, enum.Enum):
-    day = "day"
-    week = "week"
-    month = "month"
-    year = "year"
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+    quarterly = "quarterly"
+    yearly = "yearly"
+    annually = "annually"
+    biannually = "biannually"
 
 
 class PlanStatus(str, enum.Enum):
