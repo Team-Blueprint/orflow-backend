@@ -19,6 +19,16 @@ from app.db.database import get_async_db
 from main import app
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _get_token(client: AsyncClient, name: str) -> str:
+    """Extract a cookie value from the client's cookie jar."""
+    val = client.cookies.get(name)
+    if val is None:
+        raise AssertionError(f"Cookie '{name}' not found in client cookie jar")
+    return val
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 class _SessionProxy:
@@ -42,10 +52,18 @@ async def auth_client(db_session: AsyncSession):
     original = mw.AsyncSessionLocal
     mw.AsyncSessionLocal = _SessionProxy(db_session)
 
+    from app.core.config import settings
+    original_secure = settings.COOKIE_SECURE
+    original_samesite = settings.COOKIE_SAMESITE
+    settings.COOKIE_SECURE = False
+    settings.COOKIE_SAMESITE = "lax"
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
+    settings.COOKIE_SECURE = original_secure
+    settings.COOKIE_SAMESITE = original_samesite
     app.dependency_overrides.clear()
     mw.AsyncSessionLocal = original
 
@@ -53,7 +71,7 @@ async def auth_client(db_session: AsyncSession):
 # ── Signup ────────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_signup_returns_tenant_and_tokens(auth_client):
+async def test_signup_returns_tenant_and_sets_cookies(auth_client):
     resp = await auth_client.post(
         "/v1/auth/signup",
         json={"name": "Acme Corp", "email": "acme@example.com", "password": "supersecret"},
@@ -64,13 +82,18 @@ async def test_signup_returns_tenant_and_tokens(auth_client):
     assert body["tenant"]["email"] == "acme@example.com"
     assert body["tenant"]["name"] == "Acme Corp"
 
-    # Token pair returned immediately
-    assert "access_token" in body["tokens"]
-    assert "refresh_token" in body["tokens"]
-    assert body["tokens"]["token_type"] == "bearer"
-
     # Keys are NOT in signup response — they are created explicitly later
     assert "keys" not in body
+
+    # Access token returned in body for Swagger/Postman convenience
+    assert "access_token" in body
+    assert "refresh_token" in body
+    assert body["token_type"] == "bearer"
+
+    # Tokens ALSO set as cookies
+    assert _get_token(auth_client, "access_token") is not None
+    assert _get_token(auth_client, "refresh_token") is not None
+    assert _get_token(auth_client, "csrf_token") is not None
 
 
 @pytest.mark.asyncio
@@ -91,11 +114,11 @@ async def test_signup_duplicate_email_returns_409(auth_client):
 @pytest.mark.asyncio
 async def test_keys_are_null_after_signup(auth_client):
     """All key slots must be null immediately after signup."""
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "NullKeys", "email": "nullkeys@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     resp = await auth_client.get(
         "/v1/auth/keys/new",
@@ -121,8 +144,16 @@ async def test_signin_valid_credentials(auth_client):
     )
     assert resp.status_code == 200
     body = resp.json()
+    assert "tenant" in body
+    assert body["tenant"]["email"] == "test@example.com"
+
+    # Access token returned in body for Swagger/Postman convenience
     assert "access_token" in body
     assert "refresh_token" in body
+
+    # Tokens ALSO set as cookies
+    assert _get_token(auth_client, "access_token") is not None
+    assert _get_token(auth_client, "refresh_token") is not None
 
 
 @pytest.mark.asyncio
@@ -151,28 +182,35 @@ async def test_signin_unknown_email_returns_401(auth_client):
 
 @pytest.mark.asyncio
 async def test_refresh_issues_new_token_pair(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "RefreshTest", "email": "refresh@example.com", "password": "pass1234"},
     )
-    refresh_token = signup.json()["tokens"]["refresh_token"]
 
-    resp = await auth_client.post("/v1/auth/refresh", json={"refresh_token": refresh_token})
+    # refresh_token comes from the cookie set during signup
+    resp = await auth_client.post("/v1/auth/refresh")
     assert resp.status_code == 200
-    body = resp.json()
-    assert "access_token" in body
-    assert "refresh_token" in body
+    assert resp.json()["message"] == "Tokens refreshed"
+
+    # New tokens set as cookies
+    assert _get_token(auth_client, "access_token") is not None
+    assert _get_token(auth_client, "refresh_token") is not None
 
 
 @pytest.mark.asyncio
 async def test_refresh_with_access_token_returns_401(auth_client):
-    """Passing an access token to /auth/refresh must be rejected."""
-    signup = await auth_client.post(
+    """Passing an access token as refresh token must be rejected."""
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "T", "email": "t@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
-    resp = await auth_client.post("/v1/auth/refresh", json={"refresh_token": access_token})
+    access_token = _get_token(auth_client, "access_token")
+
+    # Use a fresh client to avoid cookie jar conflicts
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as standalone:
+        standalone.cookies.set("refresh_token", access_token)
+        resp = await standalone.post("/v1/auth/refresh")
     assert resp.status_code == 401
 
 
@@ -180,11 +218,11 @@ async def test_refresh_with_access_token_returns_401(auth_client):
 
 @pytest.mark.asyncio
 async def test_get_me_with_valid_jwt(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "MeTest", "email": "me@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
     resp = await auth_client.get(
         "/v1/auth/me",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -199,15 +237,33 @@ async def test_get_me_without_token_returns_401(auth_client):
     assert resp.status_code == 401
 
 
+# ── Logout ────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_logout_clears_cookies(auth_client):
+    await auth_client.post(
+        "/v1/auth/signup",
+        json={"name": "LogoutTest", "email": "logout@example.com", "password": "pass1234"},
+    )
+    assert _get_token(auth_client, "access_token") is not None
+
+    resp = await auth_client.post(
+        "/v1/auth/logout",
+        headers={"X-CSRF-Token": _get_token(auth_client, "csrf_token")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "Logged out"
+
+
 # ── POST /auth/keys/create ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_create_key_generates_value(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "Create", "email": "create@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     resp = await auth_client.post(
         "/v1/auth/keys/create",
@@ -224,11 +280,11 @@ async def test_create_key_generates_value(auth_client):
 @pytest.mark.asyncio
 async def test_create_key_twice_returns_409(auth_client):
     """Creating the same key slot twice must fail with 409."""
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "Dup", "email": "dupkey@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     await auth_client.post(
         "/v1/auth/keys/create",
@@ -248,11 +304,11 @@ async def test_create_key_twice_returns_409(auth_client):
 @pytest.mark.asyncio
 async def test_get_keys_always_viewable(auth_client):
     """Keys can be retrieved at any time — not just once."""
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "View", "email": "view@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     # Create sk_test
     create = await auth_client.post(
@@ -277,11 +333,11 @@ async def test_get_keys_always_viewable(auth_client):
 @pytest.mark.asyncio
 async def test_valid_api_key_resolves_tenant(auth_client):
     """A created sk_test key should let a request through to a protected endpoint."""
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "APIKeyTest", "email": "api@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     create = await auth_client.post(
         "/v1/auth/keys/create",
@@ -317,11 +373,11 @@ async def test_null_key_slot_cannot_be_used(auth_client):
 
 @pytest.mark.asyncio
 async def test_regenerate_key_returns_new_value(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "Regen", "email": "regen@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     # First create the key
     create = await auth_client.post(
@@ -346,11 +402,11 @@ async def test_regenerate_key_returns_new_value(auth_client):
 
 @pytest.mark.asyncio
 async def test_old_key_invalid_after_regeneration(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "OldKey", "email": "oldkey@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     create = await auth_client.post(
         "/v1/auth/keys/create",
@@ -375,11 +431,11 @@ async def test_old_key_invalid_after_regeneration(auth_client):
 
 @pytest.mark.asyncio
 async def test_revoke_key_blocks_requests(auth_client):
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "Revoke", "email": "revoke@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     create = await auth_client.post(
         "/v1/auth/keys/create",
@@ -409,11 +465,11 @@ async def test_revoke_key_blocks_requests(auth_client):
 @pytest.mark.asyncio
 async def test_keys_still_viewable_after_revocation(auth_client):
     """Revoked key value stays visible in /auth/keys/new for reference."""
-    signup = await auth_client.post(
+    await auth_client.post(
         "/v1/auth/signup",
         json={"name": "RevokeView", "email": "revokeview@example.com", "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = _get_token(auth_client, "access_token")
 
     create = await auth_client.post(
         "/v1/auth/keys/create",

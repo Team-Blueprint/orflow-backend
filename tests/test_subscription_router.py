@@ -79,7 +79,7 @@ async def test_create_subscription_immediate_charge(api_client, db_session: Asyn
     
     # Create customer and plan
     customer = Customer(tenant_id=tenant.id, email="test@test.com", name="Test")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.month)
+    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add(customer)
     db_session.add(plan)
     await db_session.commit()

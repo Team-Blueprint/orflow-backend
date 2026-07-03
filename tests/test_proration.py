@@ -11,7 +11,7 @@ from app.proration.calculator import calculate_proration
 
 def _plan(amount: int, name: str = "Plan", currency: str = "USD") -> Plan:
     # Unpersisted plain object — the calculator only reads amount/currency/name.
-    return Plan(name=name, amount=amount, currency=currency, interval=PlanInterval.month)
+    return Plan(name=name, amount=amount, currency=currency, interval=PlanInterval.monthly)
 
 
 def test_day_one_full_cycle_remaining():

@@ -24,10 +24,6 @@ class TokenPair(BaseModel):
     token_type: str = "bearer"
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
 
 class TenantRead(BaseModel):
     id: uuid.UUID
@@ -41,13 +37,34 @@ class TenantRead(BaseModel):
 
 
 class SignupResponse(BaseModel):
-    """Returned at signup — tenant profile + token pair.
+    """Returned at signup — tenant profile + access token.
 
+    The access_token is returned in the body for convenience (e.g. Swagger,
+    Postman). The frontend should rely on the http-only cookies instead.
     API keys are NOT returned here. The user creates them explicitly via
     ``POST /auth/keys/create`` from the dashboard whenever they need them.
     """
     tenant: TenantRead
-    tokens: TokenPair
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class SigninResponse(BaseModel):
+    """Returned at signin — tenant profile + access token.
+
+    The access_token is returned in the body for convenience (e.g. Swagger,
+    Postman). The frontend should rely on the http-only cookies instead.
+    """
+    tenant: TenantRead
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class AuthMessage(BaseModel):
+    """Simple message response for auth operations."""
+    message: str
 
 
 

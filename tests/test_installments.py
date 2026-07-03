@@ -43,8 +43,17 @@ async def auth_client(db_session: AsyncSession, provider: NombaProvider, router)
     original = mw.AsyncSessionLocal
     mw.AsyncSessionLocal = _SessionProxy(db_session)
     transport = ASGITransport(app=app)
+    from app.core.config import settings
+    original_secure = settings.COOKIE_SECURE
+    original_samesite = settings.COOKIE_SAMESITE
+    settings.COOKIE_SECURE = False
+    settings.COOKIE_SAMESITE = "lax"
+
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+    settings.COOKIE_SECURE = original_secure
+    settings.COOKIE_SAMESITE = original_samesite
     app.dependency_overrides.clear()
     mw.AsyncSessionLocal = original
 
@@ -54,7 +63,7 @@ async def auth_headers(auth_client: AsyncClient):
         "/v1/auth/signup",
         json={"name": "Test", "email": "test_install@example.com", "password": "pass1234"},
     )
-    token = signup.json()["tokens"]["access_token"]
+    token = auth_client.cookies.get("access_token")
     
     resp = await auth_client.post(
         "/v1/auth/keys/create",
@@ -93,7 +102,7 @@ async def installment_plan(auth_client: AsyncClient, auth_headers: dict):
             "name": "4 Month Installment",
             "amount": 25000, # $250
             "currency": "USD",
-            "interval": "month",
+            "interval": "monthly",
             "interval_count": 1,
             "installments_count": 4
         },

@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.core.middleware import TenantAuthMiddleware
 from app.core.request_id import RequestIDMiddleware
 from app.core.rate_limit import RateLimitMiddleware
@@ -47,6 +49,19 @@ app = FastAPI(
     dependencies=[Depends(api_key_header)],
 )
 
+
+def _parse_cors_origins(origins_str: str) -> list[str]:
+    """Parse comma-separated CORS origins string into a list."""
+    return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_parse_cors_origins(settings.CORS_ORIGINS),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+)
 
 app.add_middleware(IdempotencyMiddleware)
 app.add_middleware(RateLimitMiddleware)

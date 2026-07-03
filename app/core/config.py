@@ -17,8 +17,13 @@ class Settings(BaseSettings):
     DUNNING_GRACE_DAYS: int = 14
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60 * 24
-    JWT_REFRESH_EXPIRE_DAYS: int = 30
+    JWT_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_EXPIRE_DAYS: int = 14
+
+    # Cookie settings
+    COOKIE_SECURE: bool = True
+    COOKIE_SAMESITE: str = "none"
+    CORS_ORIGINS: str = "http://localhost:5173,https://orflow.vercel.app"
 
     RATE_LIMIT_DEFAULT_PER_MINUTE: int = 60
 

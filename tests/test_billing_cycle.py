@@ -45,7 +45,7 @@ async def test_billing_cycle_success(db_session: AsyncSession):
     await db_session.refresh(tenant)
     
     customer = Customer(tenant_id=tenant.id, email="test@test.com", name="Test")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.month)
+    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add_all([customer, plan])
     await db_session.commit()
     
@@ -101,7 +101,7 @@ async def test_billing_cycle_failure(db_session: AsyncSession):
     await db_session.refresh(tenant)
     
     customer = Customer(tenant_id=tenant.id, email="test2@test.com", name="Test2")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.month)
+    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add_all([customer, plan])
     await db_session.commit()
     

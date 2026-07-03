@@ -37,8 +37,17 @@ async def idem_client(db_session: AsyncSession):
     original = mw.AsyncSessionLocal
     mw.AsyncSessionLocal = _SessionProxy(db_session)
     transport = ASGITransport(app=app)
+    from app.core.config import settings
+    original_secure = settings.COOKIE_SECURE
+    original_samesite = settings.COOKIE_SAMESITE
+    settings.COOKIE_SECURE = False
+    settings.COOKIE_SAMESITE = "lax"
+
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+    settings.COOKIE_SECURE = original_secure
+    settings.COOKIE_SAMESITE = original_samesite
     app.dependency_overrides.clear()
     mw.AsyncSessionLocal = original
 
@@ -56,7 +65,7 @@ async def _signup_and_create_key(client, email: str, key_type: str = "sk_test") 
         "/v1/auth/signup",
         json={"name": "IdemTest", "email": email, "password": "pass1234"},
     )
-    access_token = signup.json()["tokens"]["access_token"]
+    access_token = client.cookies.get("access_token")
     create = await client.post(
         "/v1/auth/keys/create",
         json={"key_type": key_type},

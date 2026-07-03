@@ -64,7 +64,7 @@ async def _seed(session: AsyncSession, *, sub_status, period_end, with_token=Tru
     await session.refresh(tenant)
 
     customer = Customer(tenant_id=tenant.id, email="c@test.com", name="C")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.month)
+    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     session.add_all([customer, plan])
     await session.commit()
 
