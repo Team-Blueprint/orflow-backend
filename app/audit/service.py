@@ -21,6 +21,7 @@ def record_transition(
     entity_type: AuditEntityType,
     entity_id: uuid.UUID,
     tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
     old_status: str | None,
     new_status: str | None,
     reason: str | None = None,
@@ -29,6 +30,7 @@ def record_transition(
     """Stage an ``AuditLog`` row on the session (no commit)."""
     entry = AuditLog(
         tenant_id=tenant_id,
+        project_id=project_id,
         entity_type=entity_type,
         entity_id=entity_id,
         old_status=old_status,

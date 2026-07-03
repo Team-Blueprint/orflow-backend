@@ -14,6 +14,7 @@ from app.providers.deps import get_payment_provider
 from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.plans.models import Plan, PlanInterval
+from app.projects.models import Project
 from app.subscriptions.models import Subscription, SubscriptionStatus
 
 # We need a mock provider that implements initiate_checkout
@@ -54,6 +55,11 @@ async def api_client(db_session: AsyncSession):
     db_session.add(tenant)
     await db_session.commit()
     await db_session.refresh(tenant)
+
+    project = Project(tenant_id=tenant.id, name="Test Project")
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
     
     # Patch middleware's AsyncSessionLocal to use our test session
     from app.core import middleware as app_middleware
@@ -67,19 +73,20 @@ async def api_client(db_session: AsyncSession):
     
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        client.headers.update({"X-API-Key": _test_key})
-        yield client, tenant
+        client.headers.update({"X-API-Key": _test_key, "X-Project-ID": str(project.id)})
+        yield client, tenant, project
         
     app.dependency_overrides.clear()
     app_middleware.AsyncSessionLocal = original_session_local
 
+
 @pytest.mark.asyncio
 async def test_create_subscription_immediate_charge(api_client, db_session: AsyncSession):
-    client, tenant = api_client
+    client, tenant, project = api_client
     
     # Create customer and plan
-    customer = Customer(tenant_id=tenant.id, email="test@test.com", name="Test")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="test@test.com", name="Test")
+    plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add(customer)
     db_session.add(plan)
     await db_session.commit()

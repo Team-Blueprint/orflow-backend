@@ -26,6 +26,10 @@ class ReconciliationDiscrepancy(Base):
         Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="SET NULL"),
         nullable=True, index=True,
     )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
     run_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(native_uuid=False), nullable=False, index=True,
     )

@@ -8,10 +8,11 @@ from app.webhooks.models import WebhookEndpoint, OutboundWebhookEvent, WebhookDe
 from app.webhooks.schemas import WebhookEndpointCreate
 
 async def create_webhook_endpoint(
-    session: AsyncSession, tenant_id: uuid.UUID, endpoint_in: WebhookEndpointCreate
+    session: AsyncSession, tenant_id: uuid.UUID, project_id: uuid.UUID, endpoint_in: WebhookEndpointCreate
 ) -> WebhookEndpoint:
     endpoint = WebhookEndpoint(
         tenant_id=tenant_id,
+        project_id=project_id,
         url=endpoint_in.url,
         secret=secrets.token_hex(32),
         description=endpoint_in.description,

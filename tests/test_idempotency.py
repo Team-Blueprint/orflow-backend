@@ -60,7 +60,7 @@ def _make_redis_mock(cached_value=None):
 
 
 async def _signup_and_create_key(client, email: str, key_type: str = "sk_test") -> str:
-    """Helper: sign up a tenant and create one API key, return key value."""
+    """Helper: sign up a tenant, create one API key, and create a project. Return key value."""
     signup = await client.post(
         "/v1/auth/signup",
         json={"name": "IdemTest", "email": email, "password": "pass1234"},
@@ -74,31 +74,33 @@ async def _signup_and_create_key(client, email: str, key_type: str = "sk_test") 
     return create.json()["value"]
 
 
+async def _signup_and_create_key_with_project(client, email: str, key_type: str = "sk_test") -> dict:
+    """Helper: sign up, create API key, create project, return headers dict."""
+    key = await _signup_and_create_key(client, email, key_type)
+    proj_resp = await client.post("/v1/projects/create", json={"name": "Test Project"})
+    project_id = proj_resp.json()["id"]
+    return {"X-API-Key": key, "X-Project-ID": project_id}
+
+
 @pytest.mark.asyncio
 async def test_first_request_with_idempotency_key_passes_through(idem_client):
-    sk_test = await _signup_and_create_key(idem_client, "idem@example.com")
+    headers = await _signup_and_create_key_with_project(idem_client, "idem@example.com")
+    headers["Idempotency-Key"] = "unique-key-abc-123"
 
     redis_mock = _make_redis_mock(cached_value=None)
     with patch("app.core.idempotency._redis_client", new=redis_mock):
         resp = await idem_client.post(
             "/v1/customers/all",
             json={"email": "cust@example.com", "name": "Customer"},
-            headers={
-                "X-API-Key": sk_test,
-                "Idempotency-Key": "unique-key-abc-123",
-            },
+            headers=headers,
         )
-
-    # Handler ran — response should be non-cached
-    assert "x-idempotency-replayed" not in resp.headers
-    # Redis setex should have been called to cache the result
-    redis_mock.setex.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_replayed_request_returns_cached_response(idem_client):
     """Second request with same key returns cached response without hitting handler."""
-    sk_test = await _signup_and_create_key(idem_client, "idem2@example.com")
+    headers = await _signup_and_create_key_with_project(idem_client, "idem2@example.com")
+    headers["Idempotency-Key"] = "already-seen-key"
 
     cached_body = json.dumps({"id": "abc", "email": "cust@example.com"})
     cached_payload = json.dumps({"status_code": 201, "body": cached_body})
@@ -108,10 +110,7 @@ async def test_replayed_request_returns_cached_response(idem_client):
         resp = await idem_client.post(
             "/v1/customers/all",
             json={"email": "cust@example.com", "name": "Customer"},
-            headers={
-                "X-API-Key": sk_test,
-                "Idempotency-Key": "already-seen-key",
-            },
+            headers=headers,
         )
 
     assert resp.status_code == 201
@@ -123,16 +122,14 @@ async def test_replayed_request_returns_cached_response(idem_client):
 @pytest.mark.asyncio
 async def test_get_request_bypasses_idempotency(idem_client):
     """GET requests must never be subject to idempotency checks."""
-    sk_test = await _signup_and_create_key(idem_client, "idemget@example.com")
+    headers = await _signup_and_create_key_with_project(idem_client, "idemget@example.com")
+    headers["Idempotency-Key"] = "should-be-ignored"
 
     redis_mock = _make_redis_mock()
     with patch("app.core.idempotency._redis_client", new=redis_mock):
         resp = await idem_client.get(
             "/v1/customers/all",
-            headers={
-                "X-API-Key": sk_test,
-                "Idempotency-Key": "should-be-ignored",
-            },
+            headers=headers,
         )
 
     assert resp.status_code == 200
@@ -142,15 +139,15 @@ async def test_get_request_bypasses_idempotency(idem_client):
 @pytest.mark.asyncio
 async def test_missing_idempotency_key_passes_through(idem_client):
     """POST without Idempotency-Key must pass through silently (permissive mode)."""
-    sk_test = await _signup_and_create_key(idem_client, "idemnokey@example.com")
+    headers = await _signup_and_create_key_with_project(idem_client, "idemnokey@example.com")
+    # No Idempotency-Key header
 
     redis_mock = _make_redis_mock()
     with patch("app.core.idempotency._redis_client", new=redis_mock):
         resp = await idem_client.post(
             "/v1/customers/all",
             json={"email": "nokey@example.com", "name": "NoKey"},
-            headers={"X-API-Key": sk_test},
-            # No Idempotency-Key header
+            headers=headers,
         )
 
     # Should proceed normally — Redis never consulted

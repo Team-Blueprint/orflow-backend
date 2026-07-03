@@ -20,6 +20,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import current_project_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +51,7 @@ async def enqueue_webhook_event(
     
     event = OutboundWebhookEvent(
         tenant_id=tenant_id,
+        project_id=current_project_id.get(),
         event_type=event_type,
         payload=payload or {},
         status=OutboundEventStatus.pending

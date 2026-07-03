@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.invoices.models import Invoice, InvoiceStatus
+from app.projects.models import Project
 from app.webhooks.models import WebhookEvent, PaymentAttempt
 from app.providers.base import PaymentStatus
 
@@ -75,12 +76,18 @@ async def test_nomba_webhook(db_session: AsyncSession):
     await db_session.commit()
     await db_session.refresh(tenant)
 
-    customer = Customer(tenant_id=tenant.id, email="wh@test.com", name="Test")
+    project = Project(tenant_id=tenant.id, name="Test")
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="wh@test.com", name="Test")
     db_session.add(customer)
     await db_session.commit()
 
     invoice = Invoice(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         status=InvoiceStatus.open,
         amount_due=1000,

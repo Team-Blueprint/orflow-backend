@@ -8,6 +8,7 @@ from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.plans.models import Plan, PlanInterval
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
+from app.projects.models import Project
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
 from app.invoices.models import Invoice, InvoiceStatus
 from app.worker.billing_cycle import process_billing_cycle
@@ -44,18 +45,24 @@ async def test_billing_cycle_success(db_session: AsyncSession):
     await db_session.commit()
     await db_session.refresh(tenant)
     
-    customer = Customer(tenant_id=tenant.id, email="test@test.com", name="Test")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
+    project = Project(tenant_id=tenant.id, name="Test Project")
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+    
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="test@test.com", name="Test")
+    plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add_all([customer, plan])
     await db_session.commit()
     
-    pm = PaymentMethod(tenant_id=tenant.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok")
+    pm = PaymentMethod(tenant_id=tenant.id, project_id=project.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok")
     db_session.add(pm)
     await db_session.commit()
     
     now = datetime.now(timezone.utc)
     sub = Subscription(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,
@@ -100,18 +107,24 @@ async def test_billing_cycle_failure(db_session: AsyncSession):
     await db_session.commit()
     await db_session.refresh(tenant)
     
-    customer = Customer(tenant_id=tenant.id, email="test2@test.com", name="Test2")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
+    project = Project(tenant_id=tenant.id, name="Test Project")
+    db_session.add(project)
+    await db_session.commit()
+    await db_session.refresh(project)
+    
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="test2@test.com", name="Test2")
+    plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     db_session.add_all([customer, plan])
     await db_session.commit()
     
-    pm = PaymentMethod(tenant_id=tenant.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok")
+    pm = PaymentMethod(tenant_id=tenant.id, project_id=project.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok")
     db_session.add(pm)
     await db_session.commit()
     
     now = datetime.now(timezone.utc)
     sub = Subscription(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,

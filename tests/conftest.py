@@ -24,6 +24,7 @@ import app.tenants.models  # noqa: F401,E402
 import app.customers.models  # noqa: F401,E402
 import app.plans.models  # noqa: F401,E402
 import app.payment_methods.models  # noqa: F401,E402
+import app.projects.models  # noqa: F401,E402
 import app.subscriptions.models  # noqa: F401,E402
 import app.invoices.models  # noqa: F401,E402
 import app.audit.models  # noqa: F401,E402

@@ -48,29 +48,40 @@ async def _signup(client: AsyncClient, email: str):
     signup.raise_for_status()
     return client.cookies.get("access_token")
 
+async def _signup_and_create_project(client: AsyncClient, email: str):
+    """Sign up and create a project, returning access token and project ID."""
+    token = await _signup(client, email)
+    proj_resp = await client.post(
+        "/v1/projects/create",
+        json={"name": "Test Project"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert proj_resp.status_code in (200, 201)
+    return token, proj_resp.json()["id"]
+
 @pytest.fixture
 async def auth_sk_headers(auth_client: AsyncClient):
-    """Sign up and create an sk_test key to use for endpoint management."""
-    # Create key
+    """Sign up, create project and an sk_test key to use for endpoint management."""
+    token, project_id = await _signup_and_create_project(auth_client, 'sk@test.com')
     resp = await auth_client.post(
         "/v1/auth/keys/create",
         json={"key_type": "sk_test"},
-        headers={"Authorization": f"Bearer {await _signup(auth_client, 'sk@test.com')}"}
+        headers={"Authorization": f"Bearer {token}"}
     )
     sk_test = resp.json()["value"]
-    return {"X-API-Key": sk_test}
+    return {"X-API-Key": sk_test, "X-Project-ID": project_id}
 
 @pytest.fixture
 async def auth_pk_headers(auth_client: AsyncClient):
-    """Sign up and create a pk_test key."""
-    # Create key
+    """Sign up, create project and a pk_test key."""
+    token, project_id = await _signup_and_create_project(auth_client, 'pk@test.com')
     resp = await auth_client.post(
         "/v1/auth/keys/create",
         json={"key_type": "pk_test"},
-        headers={"Authorization": f"Bearer {await _signup(auth_client, 'pk@test.com')}"}
+        headers={"Authorization": f"Bearer {token}"}
     )
     pk_test = resp.json()["value"]
-    return {"X-API-Key": pk_test}
+    return {"X-API-Key": pk_test, "X-Project-ID": project_id}
 
 @pytest.mark.asyncio
 async def test_create_endpoint_requires_sk_key(auth_client: AsyncClient, auth_pk_headers: dict):

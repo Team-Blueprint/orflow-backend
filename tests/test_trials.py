@@ -72,7 +72,10 @@ async def auth_headers(auth_client: AsyncClient):
         headers={"Authorization": f"Bearer {token}"}
     )
     sk_test = resp.json()["value"]
-    return {"X-API-Key": sk_test}
+
+    proj_resp = await auth_client.post("/v1/projects/create", json={"name": "Test Project"})
+    project_id = proj_resp.json()["id"]
+    return {"X-API-Key": sk_test, "X-Project-ID": project_id}
 
 @pytest.fixture
 async def customer_and_pm(auth_client: AsyncClient, auth_headers: dict):

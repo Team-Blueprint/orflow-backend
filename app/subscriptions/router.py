@@ -16,11 +16,12 @@ from app.subscriptions.schemas import (
 )
 from app.subscriptions.service import SubscriptionService
 
+from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
 
 
-router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
+router = APIRouter(prefix="/subscriptions", tags=["subscriptions"], dependencies=[Depends(_require_project)])
 
 @router.post(
     "/create", 

@@ -26,6 +26,7 @@ class AuditLog(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
 
     entity_type: Mapped[AuditEntityType] = mapped_column(Enum(AuditEntityType, native_enum=False), nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), nullable=False, index=True)

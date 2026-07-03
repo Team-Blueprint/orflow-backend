@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.context import current_project_id, current_tenant_id
 from app.invoices.models import Invoice, InvoiceStatus
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
 from httpx._transports.asgi import ASGITransport
@@ -71,7 +72,10 @@ async def auth_headers(auth_client: AsyncClient):
         headers={"Authorization": f"Bearer {token}"}
     )
     sk_test = resp.json()["value"]
-    return {"X-API-Key": sk_test}
+
+    proj_resp = await auth_client.post("/v1/projects/create", json={"name": "Test Project"})
+    project_id = proj_resp.json()["id"]
+    return {"X-API-Key": sk_test, "X-Project-ID": project_id}
 
 @pytest.fixture
 async def customer_and_pm(auth_client: AsyncClient, auth_headers: dict):
@@ -177,7 +181,13 @@ async def test_process_due_installment_invoices(
     # Manually transition subscription to active and mark first invoice as paid
     from app.subscriptions.state_machine import transition_subscription
     sub = await db_session.get(Subscription, uuid.UUID(sub_id))
-    await transition_subscription(db_session, sub, SubscriptionStatus.active)
+    token = current_tenant_id.set(sub.tenant_id)
+    proj_token = current_project_id.set(sub.project_id)
+    try:
+        await transition_subscription(db_session, sub, SubscriptionStatus.active)
+    finally:
+        current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
     
     invoices[0].status = InvoiceStatus.paid
     
@@ -224,7 +234,13 @@ async def test_installment_completion(
     # Transition to active
     from app.subscriptions.state_machine import transition_subscription
     sub = await db_session.get(Subscription, sub_id)
-    await transition_subscription(db_session, sub, SubscriptionStatus.active)
+    token = current_tenant_id.set(sub.tenant_id)
+    proj_token = current_project_id.set(sub.project_id)
+    try:
+        await transition_subscription(db_session, sub, SubscriptionStatus.active)
+    finally:
+        current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
     
     # Pay all but one
     for inv in invoices[:-1]:
@@ -233,7 +249,13 @@ async def test_installment_completion(
     
     # Use transition_invoice for the last one to trigger completion logic
     from app.invoices.state_machine import transition_invoice
-    await transition_invoice(db_session, invoices[-1], InvoiceStatus.paid)
+    token = current_tenant_id.set(sub.tenant_id)
+    proj_token = current_project_id.set(sub.project_id)
+    try:
+        await transition_invoice(db_session, invoices[-1], InvoiceStatus.paid)
+    finally:
+        current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
     
     # Verify subscription is completed
     sub = await db_session.get(Subscription, sub_id)

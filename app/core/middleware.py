@@ -18,6 +18,7 @@ from app.db.database import AsyncSessionLocal
 # Update these whenever a new public path is added or the /v1 prefix changes.
 _EXEMPT_PREFIXES = (
     "/v1/auth/",
+    "/v1/projects/",
     "/v1/webhooks/inbound/",
     "/docs",
     "/redoc",

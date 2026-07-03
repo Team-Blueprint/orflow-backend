@@ -19,6 +19,8 @@ import app.subscriptions.models  # noqa: F401
 import app.invoices.models  # noqa: F401
 import app.audit.models  # noqa: F401
 import app.webhooks.models  # noqa: F401
+import app.reconciliation.models  # noqa: F401
+import app.projects.models  # noqa: F401
 
 from app.db.base import Base
 

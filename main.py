@@ -20,6 +20,7 @@ import app.invoices.models
 import app.audit.models
 import app.webhooks.models
 import app.reconciliation.models
+import app.projects.models
 from app.tenants.router import router as tenants_router
 from app.customers.router import router as customers_router
 from app.plans.router import router as plans_router
@@ -28,6 +29,7 @@ from app.subscriptions.router import router as subscriptions_router
 from app.webhooks.router import router as webhooks_router
 from app.webhooks.outbound_router import router as outbound_webhooks_router
 from app.reconciliation.router import router as reconciliation_router
+from app.projects.router import router as projects_router
 from app.core.exceptions import EntityNotFoundError, InvalidStateTransition
 from fastapi.responses import JSONResponse
 from fastapi import Request, HTTPException
@@ -60,7 +62,7 @@ app.add_middleware(
     allow_origins=_parse_cors_origins(settings.CORS_ORIGINS),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Project-ID"],
 )
 
 app.add_middleware(IdempotencyMiddleware)
@@ -76,6 +78,7 @@ app.include_router(subscriptions_router, prefix="/v1")
 app.include_router(webhooks_router, prefix="/v1")
 app.include_router(outbound_webhooks_router, prefix="/v1")
 app.include_router(reconciliation_router, prefix="/v1")
+app.include_router(projects_router, prefix="/v1")
 
 @app.exception_handler(EntityNotFoundError)
 async def entity_not_found_handler(request: Request, exc: EntityNotFoundError):

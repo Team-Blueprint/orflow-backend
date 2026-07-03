@@ -21,6 +21,9 @@ class Customer(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 

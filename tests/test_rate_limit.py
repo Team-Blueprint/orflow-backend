@@ -74,12 +74,20 @@ async def _signup_and_create_key(client, email: str) -> str:
     return create.json()["value"]
 
 
+async def _signup_and_create_key_with_project(client, email: str) -> dict:
+    """Sign up, create API key, create project, return headers dict."""
+    key = await _signup_and_create_key(client, email)
+    proj_resp = await client.post("/v1/projects/create", json={"name": "Test Project"})
+    project_id = proj_resp.json()["id"]
+    return {"X-API-Key": key, "X-Project-ID": project_id}
+
+
 @pytest.mark.asyncio
 async def test_request_under_limit_passes(rl_client):
-    sk_test = await _signup_and_create_key(rl_client, "rl@example.com")
+    headers = await _signup_and_create_key_with_project(rl_client, "rl@example.com")
 
     with patch("app.core.rate_limit._redis_client", new=_make_redis_mock(count=1)):
-        resp = await rl_client.get("/v1/customers/all", headers={"X-API-Key": sk_test})
+        resp = await rl_client.get("/v1/customers/all", headers=headers)
 
     assert resp.status_code == 200
     assert "x-ratelimit-limit" in resp.headers

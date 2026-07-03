@@ -7,9 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_async_db
 from app.plans.schemas import PlanCreate, PlanRead, PlanUpdate
 from app.plans.service import PlanService
+from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
-router = APIRouter(prefix="/plans", tags=["plans"])
+router = APIRouter(prefix="/plans", tags=["plans"], dependencies=[Depends(_require_project)])
 
 @router.post(
     "/create", 

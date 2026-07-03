@@ -11,7 +11,7 @@ from app.subscriptions.models import Subscription, SubscriptionStatus
 from app.invoices.state_machine import transition_invoice
 from app.subscriptions.state_machine import transition_subscription
 from app.providers.base import PaymentStatus, FailureReason
-from app.core.context import current_tenant_id
+from app.core.context import current_project_id, current_tenant_id
 from app.dunning.service import clear_dunning, open_or_advance_dunning
 from app.webhooks.outbound import enqueue_webhook_event
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
@@ -76,6 +76,7 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
 
     attempt = PaymentAttempt(
         tenant_id=invoice.tenant_id,
+        project_id=invoice.project_id,
         invoice_id=invoice.id,
         status=payment_status,
         failure_reason=failure_reason,
@@ -86,6 +87,7 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
     
     # Process outcome with tenant context
     token = current_tenant_id.set(invoice.tenant_id)
+    proj_token = current_project_id.set(invoice.project_id)
     try:
         if payment_status == PaymentStatus.success:
             if invoice.status != InvoiceStatus.paid:
@@ -176,6 +178,7 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
             )
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     # Save idempotency record
     event = WebhookEvent(

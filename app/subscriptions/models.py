@@ -39,6 +39,7 @@ class Subscription(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     plan_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("plans.id"), nullable=False, index=True)
     payment_method_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(native_uuid=False), ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True)

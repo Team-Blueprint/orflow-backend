@@ -12,10 +12,12 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.context import current_project_id, current_tenant_id
 from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.plans.models import Plan, PlanInterval
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
+from app.projects.models import Project
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
 from app.invoices.models import Invoice, InvoiceStatus
 from app.webhooks.models import PaymentAttempt
@@ -63,13 +65,19 @@ async def _seed(session: AsyncSession, *, sub_status, period_end, with_token=Tru
     await session.commit()
     await session.refresh(tenant)
 
-    customer = Customer(tenant_id=tenant.id, email="c@test.com", name="C")
-    plan = Plan(tenant_id=tenant.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
+    project = Project(tenant_id=tenant.id, name="Test Project")
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="c@test.com", name="C")
+    plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Pro", amount=1000, currency="USD", interval=PlanInterval.monthly)
     session.add_all([customer, plan])
     await session.commit()
 
     pm = PaymentMethod(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         type=PaymentMethodType.card,
         provider_token="tok" if with_token else None,
@@ -79,6 +87,7 @@ async def _seed(session: AsyncSession, *, sub_status, period_end, with_token=Tru
 
     sub = Subscription(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         plan_id=plan.id,
         payment_method_id=pm.id,
@@ -90,7 +99,7 @@ async def _seed(session: AsyncSession, *, sub_status, period_end, with_token=Tru
     session.add(sub)
     await session.commit()
     await session.refresh(sub)
-    return tenant, customer, plan, pm, sub
+    return tenant, project, customer, plan, pm, sub
 
 
 def _patch_session(monkeypatch, db_session):
@@ -115,11 +124,12 @@ def _patch_session(monkeypatch, db_session):
 @pytest.mark.asyncio
 async def test_first_failure_opens_dunning_and_schedules_retry(db_session: AsyncSession):
     now = datetime.now(timezone.utc)
-    _, customer, plan, _, sub = await _seed(
+    _, project, customer, plan, _, sub = await _seed(
         db_session, sub_status=SubscriptionStatus.active, period_end=now - timedelta(seconds=1), api_key="k1"
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
+        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -130,12 +140,18 @@ async def test_first_failure_opens_dunning_and_schedules_retry(db_session: Async
     await db_session.commit()
     await db_session.refresh(invoice)
 
-    await open_or_advance_dunning(
-        db_session,
-        invoice=invoice,
-        subscription=sub,
-        failure_reason=FailureReason.insufficient_funds,
-    )
+    token = current_tenant_id.set(sub.tenant_id)
+    proj_token = current_project_id.set(project.id)
+    try:
+        await open_or_advance_dunning(
+            db_session,
+            invoice=invoice,
+            subscription=sub,
+            failure_reason=FailureReason.insufficient_funds,
+        )
+    finally:
+        current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     await db_session.refresh(sub)
     await db_session.refresh(invoice)
@@ -150,11 +166,12 @@ async def test_first_failure_opens_dunning_and_schedules_retry(db_session: Async
 @pytest.mark.asyncio
 async def test_expired_card_flags_without_retry_or_unpaid(db_session: AsyncSession):
     now = datetime.now(timezone.utc)
-    _, customer, _, _, sub = await _seed(
+    _, project, customer, _, _, sub = await _seed(
         db_session, sub_status=SubscriptionStatus.active, period_end=now - timedelta(seconds=1), api_key="k2"
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
+        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -164,12 +181,18 @@ async def test_expired_card_flags_without_retry_or_unpaid(db_session: AsyncSessi
     db_session.add(invoice)
     await db_session.commit()
 
-    await open_or_advance_dunning(
-        db_session,
-        invoice=invoice,
-        subscription=sub,
-        failure_reason=FailureReason.expired_card,
-    )
+    token = current_tenant_id.set(sub.tenant_id)
+    proj_token = current_project_id.set(project.id)
+    try:
+        await open_or_advance_dunning(
+            db_session,
+            invoice=invoice,
+            subscription=sub,
+            failure_reason=FailureReason.expired_card,
+        )
+    finally:
+        current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     await db_session.refresh(sub)
     await db_session.refresh(invoice)
@@ -187,11 +210,12 @@ async def test_dunning_retry_recovers_subscription(db_session: AsyncSession, mon
     _patch_session(monkeypatch, db_session)
 
     now = datetime.now(timezone.utc)
-    _, customer, _, _, sub = await _seed(
+    _, project, customer, _, _, sub = await _seed(
         db_session, sub_status=SubscriptionStatus.past_due, period_end=now - timedelta(seconds=1), api_key="k3"
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
+        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -230,11 +254,12 @@ async def test_dunning_exhaustion_transitions_to_unpaid(db_session: AsyncSession
     _patch_session(monkeypatch, db_session)
 
     now = datetime.now(timezone.utc)
-    _, customer, _, _, sub = await _seed(
+    _, project, customer, _, _, sub = await _seed(
         db_session, sub_status=SubscriptionStatus.past_due, period_end=now - timedelta(seconds=1), api_key="k4"
     )
     invoice = Invoice(
         tenant_id=sub.tenant_id,
+        project_id=project.id,
         customer_id=customer.id,
         subscription_id=sub.id,
         status=InvoiceStatus.open,
@@ -262,7 +287,7 @@ async def test_grace_worker_cancels_long_unpaid(db_session: AsyncSession, monkey
     _patch_session(monkeypatch, db_session)
 
     now = datetime.now(timezone.utc)
-    _, _, _, _, sub = await _seed(
+    _, project, _, _, _, sub = await _seed(
         db_session, sub_status=SubscriptionStatus.unpaid, period_end=now - timedelta(days=40), api_key="k5"
     )
     # Force the unpaid clock well past the default 14-day grace window.

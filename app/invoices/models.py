@@ -30,6 +30,7 @@ class Invoice(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
     # Nullable: standalone invoices need not belong to a subscription.
     subscription_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(native_uuid=False), ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=True, index=True)
@@ -76,6 +77,7 @@ class InvoiceLineItem(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True)
 
     description: Mapped[str] = mapped_column(String(255), nullable=False)

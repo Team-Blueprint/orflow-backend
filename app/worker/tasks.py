@@ -36,7 +36,7 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
     """
     Arq worker job to expire a subscription if it remains incomplete (first invoice unpaid).
     """
-    from app.core.context import current_tenant_id
+    from app.core.context import current_project_id, current_tenant_id
     from app.subscriptions.models import Subscription, SubscriptionStatus
     from app.subscriptions.state_machine import transition_subscription
     
@@ -49,6 +49,7 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
             return
 
         token = current_tenant_id.set(sub.tenant_id)
+        proj_token = current_project_id.set(sub.project_id)
         try:
             await transition_subscription(session, sub, SubscriptionStatus.incomplete_expired, actor="expiry_worker")
             logger.info("Successfully expired incomplete subscription %s.", subscription_id)
@@ -57,6 +58,7 @@ async def expire_incomplete_subscription_job(ctx: Dict[str, Any], subscription_i
             await session.rollback()
         finally:
             current_tenant_id.reset(token)
+            current_project_id.reset(proj_token)
 
 async def schedule_trial_activation(subscription_id: uuid.UUID, run_at: datetime):
     """
@@ -75,7 +77,7 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
     Transitions the subscription to active if it has a valid payment method,
     or to paused if it doesn't.
     """
-    from app.core.context import current_tenant_id
+    from app.core.context import current_project_id, current_tenant_id
     from app.subscriptions.models import Subscription, SubscriptionStatus
     from app.subscriptions.state_machine import transition_subscription
     from app.payment_methods.service import PaymentMethodService
@@ -90,6 +92,7 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
             return
 
         token = current_tenant_id.set(sub.tenant_id)
+        proj_token = current_project_id.set(sub.project_id)
         try:
             # Check for valid payment method
             pm_svc = PaymentMethodService(session)
@@ -139,6 +142,7 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
             await session.rollback()
         finally:
             current_tenant_id.reset(token)
+            current_project_id.reset(proj_token)
 
 async def enqueue_webhook_delivery(event_id: uuid.UUID):
     """

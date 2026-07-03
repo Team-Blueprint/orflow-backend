@@ -11,11 +11,12 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.context import current_tenant_id
+from app.core.context import current_project_id, current_tenant_id
 from app.tenants.models import Tenant
 from app.customers.models import Customer
 from app.plans.models import Plan, PlanInterval
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
+from app.projects.models import Project
 from app.subscriptions.models import Subscription, SubscriptionStatus, SubscriptionType
 from app.subscriptions.service import SubscriptionService
 from app.invoices.models import Invoice, InvoiceStatus, InvoiceLineItem
@@ -53,14 +54,19 @@ async def _seed(session: AsyncSession, *, old_amount=1000, new_amount=3000, api_
     await session.commit()
     await session.refresh(tenant)
 
-    customer = Customer(tenant_id=tenant.id, email="c@test.com", name="C")
-    old_plan = Plan(tenant_id=tenant.id, name="Basic", amount=old_amount, currency="USD", interval=PlanInterval.monthly)
-    new_plan = Plan(tenant_id=tenant.id, name="Pro", amount=new_amount, currency="USD", interval=PlanInterval.monthly)
+    project = Project(tenant_id=tenant.id, name="Test Project")
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+
+    customer = Customer(tenant_id=tenant.id, project_id=project.id, email="c@test.com", name="C")
+    old_plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Basic", amount=old_amount, currency="USD", interval=PlanInterval.monthly)
+    new_plan = Plan(tenant_id=tenant.id, project_id=project.id, name="Pro", amount=new_amount, currency="USD", interval=PlanInterval.monthly)
     session.add_all([customer, old_plan, new_plan])
     await session.commit()
 
     pm = PaymentMethod(
-        tenant_id=tenant.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok"
+        tenant_id=tenant.id, project_id=project.id, customer_id=customer.id, type=PaymentMethodType.card, provider_token="tok"
     )
     session.add(pm)
     await session.commit()
@@ -69,6 +75,7 @@ async def _seed(session: AsyncSession, *, old_amount=1000, new_amount=3000, api_
     # Half the cycle remaining; +1h buffer keeps the integer-day math stable.
     sub = Subscription(
         tenant_id=tenant.id,
+        project_id=project.id,
         customer_id=customer.id,
         plan_id=old_plan.id,
         payment_method_id=pm.id,
@@ -80,18 +87,20 @@ async def _seed(session: AsyncSession, *, old_amount=1000, new_amount=3000, api_
     session.add(sub)
     await session.commit()
     await session.refresh(sub)
-    return tenant, customer, old_plan, new_plan, pm, sub
+    return tenant, project, customer, old_plan, new_plan, pm, sub
 
 
 @pytest.mark.asyncio
 async def test_upgrade_charges_net_and_swaps_plan(db_session: AsyncSession):
-    tenant, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp1")
+    tenant, project, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp1")
     token = current_tenant_id.set(tenant.id)
+    proj_token = current_project_id.set(project.id)
     try:
         svc = SubscriptionService(db_session)
         resp = await svc.change_plan_flow(sub.id, new_plan.id, _SuccessProvider())
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     # net = (3000 - 1000) * 15/30 = 1000
     assert resp.invoice.amount_due == 1000
@@ -117,13 +126,15 @@ async def test_upgrade_charges_net_and_swaps_plan(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_downgrade_does_not_charge(db_session: AsyncSession):
-    tenant, _, _, new_plan, _, sub = await _seed(db_session, old_amount=3000, new_amount=1000, api_key="cp2")
+    tenant, project, _, _, new_plan, _, sub = await _seed(db_session, old_amount=3000, new_amount=1000, api_key="cp2")
     token = current_tenant_id.set(tenant.id)
+    proj_token = current_project_id.set(project.id)
     try:
         svc = SubscriptionService(db_session)
         resp = await svc.change_plan_flow(sub.id, new_plan.id, _SuccessProvider())
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     # net = (1000 - 3000) * 15/30 = -1000  -> nothing collected
     assert resp.invoice.amount_due == -1000
@@ -140,13 +151,15 @@ async def test_downgrade_does_not_charge(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_failed_charge_swaps_plan_and_enters_dunning(db_session: AsyncSession):
-    tenant, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp3")
+    tenant, project, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp3")
     token = current_tenant_id.set(tenant.id)
+    proj_token = current_project_id.set(project.id)
     try:
         svc = SubscriptionService(db_session)
         resp = await svc.change_plan_flow(sub.id, new_plan.id, _FailProvider())
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
     assert resp.charged is False
     await db_session.refresh(sub)
@@ -163,26 +176,30 @@ async def test_failed_charge_swaps_plan_and_enters_dunning(db_session: AsyncSess
 
 @pytest.mark.asyncio
 async def test_change_to_same_plan_rejected(db_session: AsyncSession):
-    tenant, _, old_plan, _, _, sub = await _seed(db_session, api_key="cp4")
+    tenant, project, _, old_plan, _, _, sub = await _seed(db_session, api_key="cp4")
     token = current_tenant_id.set(tenant.id)
+    proj_token = current_project_id.set(project.id)
     try:
         svc = SubscriptionService(db_session)
         with pytest.raises(ValueError, match="already on this plan"):
             await svc.change_plan_flow(sub.id, old_plan.id, _SuccessProvider())
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)
 
 
 @pytest.mark.asyncio
 async def test_change_plan_requires_active_subscription(db_session: AsyncSession):
-    tenant, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp5")
+    tenant, project, _, _, new_plan, _, sub = await _seed(db_session, api_key="cp5")
     sub.status = SubscriptionStatus.past_due
     await db_session.commit()
 
     token = current_tenant_id.set(tenant.id)
+    proj_token = current_project_id.set(project.id)
     try:
         svc = SubscriptionService(db_session)
         with pytest.raises(ValueError, match="active subscription"):
             await svc.change_plan_flow(sub.id, new_plan.id, _SuccessProvider())
     finally:
         current_tenant_id.reset(token)
+        current_project_id.reset(proj_token)

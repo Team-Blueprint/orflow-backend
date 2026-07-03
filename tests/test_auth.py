@@ -29,6 +29,17 @@ def _get_token(client: AsyncClient, name: str) -> str:
     return val
 
 
+async def _create_project(client: AsyncClient, access_token: str) -> str:
+    """Create a test project and return its ID."""
+    resp = await client.post(
+        "/v1/projects/create",
+        json={"name": "Test Project"},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code in (200, 201), f"Project creation failed: {resp.text}"
+    return resp.json()["id"]
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 class _SessionProxy:
@@ -339,6 +350,8 @@ async def test_valid_api_key_resolves_tenant(auth_client):
     )
     access_token = _get_token(auth_client, "access_token")
 
+    project_id = await _create_project(auth_client, access_token)
+
     create = await auth_client.post(
         "/v1/auth/keys/create",
         json={"key_type": "sk_test"},
@@ -346,7 +359,10 @@ async def test_valid_api_key_resolves_tenant(auth_client):
     )
     sk_test = create.json()["value"]
 
-    resp = await auth_client.get("/v1/customers/all", headers={"X-API-Key": sk_test})
+    resp = await auth_client.get(
+        "/v1/customers/all",
+        headers={"X-API-Key": sk_test, "X-Project-ID": project_id},
+    )
     assert resp.status_code == 200
 
 
@@ -437,6 +453,8 @@ async def test_revoke_key_blocks_requests(auth_client):
     )
     access_token = _get_token(auth_client, "access_token")
 
+    project_id = await _create_project(auth_client, access_token)
+
     create = await auth_client.post(
         "/v1/auth/keys/create",
         json={"key_type": "pk_test"},
@@ -445,7 +463,10 @@ async def test_revoke_key_blocks_requests(auth_client):
     pk_test = create.json()["value"]
 
     # Key works before revocation
-    pre = await auth_client.get("/v1/customers/all", headers={"X-API-Key": pk_test})
+    pre = await auth_client.get(
+        "/v1/customers/all",
+        headers={"X-API-Key": pk_test, "X-Project-ID": project_id},
+    )
     assert pre.status_code == 200
 
     # Revoke

@@ -67,6 +67,7 @@ async def transition_invoice(
         entity_type=AuditEntityType.invoice,
         entity_id=invoice.id,
         tenant_id=invoice.tenant_id,
+        project_id=invoice.project_id,
         old_status=old_status.value,
         new_status=new_status.value,
         reason=reason,

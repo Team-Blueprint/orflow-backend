@@ -269,6 +269,7 @@ class SubscriptionService(BaseRepository[Subscription]):
             self.session.add(
                 InvoiceLineItem(
                     tenant_id=subscription.tenant_id,
+                    project_id=subscription.project_id,
                     invoice_id=invoice.id,
                     description=item.description,
                     amount_minor=item.amount_minor,
@@ -313,6 +314,7 @@ class SubscriptionService(BaseRepository[Subscription]):
                 )
                 attempt = PaymentAttempt(
                     tenant_id=invoice.tenant_id,
+                    project_id=invoice.project_id,
                     invoice_id=invoice.id,
                     status=charge_result.status,
                     failure_reason=charge_result.failure_reason,
