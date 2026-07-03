@@ -6,19 +6,27 @@ import hashlib
 import json
 from datetime import datetime, timedelta
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.db.database import AsyncSessionLocal
 from app.webhooks.models import WebhookEndpoint, OutboundWebhookEvent, WebhookDeliveryAttempt, OutboundEventStatus
 
 logger = logging.getLogger(__name__)
 
 async def get_arq_pool():
-    # Use config in real app
-    return await create_pool(RedisSettings(host='localhost', port=6379))
+    url = urlparse(settings.REDIS_URL)
+    return await create_pool(RedisSettings(
+        host=url.hostname or 'localhost',
+        port=url.port or 6379,
+        password=url.password,
+        database=int(url.path[1:]) if url.path and url.path != '/' else 0,
+        ssl=url.scheme == 'rediss',
+    ))
 
 async def schedule_subscription_expiry(subscription_id: uuid.UUID, delay_hours: int = 23):
     """
