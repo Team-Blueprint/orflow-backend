@@ -44,7 +44,7 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if _is_exempt(request.url.path):
+        if request.method == "OPTIONS" or _is_exempt(request.url.path):
             return await call_next(request)
 
         api_key = request.headers.get("X-API-Key")

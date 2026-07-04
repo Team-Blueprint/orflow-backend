@@ -27,6 +27,9 @@ async def _require_tenant(
     for API-key-authenticated requests). Falls back to JWT from the
     ``Authorization`` header or ``access_token`` cookie for dashboard users.
     """
+    if request.method == "OPTIONS":
+        return None
+
     tid = current_tenant_id.get()
     if tid is not None:
         return tid
@@ -71,6 +74,9 @@ async def _require_project(
     Must be used on all project-scoped resource endpoints.
     The project must belong to the authenticated tenant.
     """
+    if request.method == "OPTIONS":
+        return None
+
     project_id_str = x_project_id
     if project_id_str is None:
         raise HTTPException(
