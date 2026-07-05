@@ -6,17 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_async_db
 from app.providers.base import PaymentProviderAdapter
 from app.providers.deps import get_payment_provider
+from app.core.deps import _require_project
+from app.core.exceptions import EntityNotFoundError, ErrorResponse
+from app.projects.models import Project
 from app.subscriptions.schemas import (
     ChangePlanRequest,
     ChangePlanResponse,
+    SubscriberRead,
     SubscriptionCreate,
     SubscriptionCreateResponse,
     SubscriptionRead,
+    SubscriptionWithPlanRead,
     SubscriptionAuditLogRead,
 )
 from app.subscriptions.service import SubscriptionService
-
-from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
 
 
@@ -150,4 +153,48 @@ async def get_audit_log(
     )
     result = await session.execute(stmt)
     return result.scalars().all()
+
+@router.get(
+    "/list",
+    response_model=list[SubscriptionWithPlanRead],
+    summary="List subscriptions",
+    description="Returns all subscriptions for the current tenant and project. Optionally filter by plan_id.",
+    responses={
+        400: {"model": ErrorResponse, "description": "Missing X-Project-ID header."}
+    }
+)
+async def list_subscriptions(
+    plan_id: uuid.UUID | None = None,
+    offset: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_async_db),
+    _project: Project = Depends(_require_project),
+):
+    svc = SubscriptionService(db)
+    rows = await svc.list_by_project(
+        _project.id, plan_id=plan_id, offset=offset, limit=limit
+    )
+    return [SubscriptionWithPlanRead.from_db(sub, plan) for sub, plan in rows]
+
+@router.get(
+    "/subscribers/list",
+    response_model=list[SubscriberRead],
+    summary="List subscribers",
+    description="Returns all customers with subscriptions in the current project. Optionally filter by plan_id.",
+    responses={
+        400: {"model": ErrorResponse, "description": "Missing X-Project-ID header."}
+    }
+)
+async def list_subscribers(
+    plan_id: uuid.UUID | None = None,
+    offset: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_async_db),
+    _project: Project = Depends(_require_project),
+):
+    svc = SubscriptionService(db)
+    customers, subs_map = await svc.list_subscribers_by_project(
+        _project.id, plan_id=plan_id, offset=offset, limit=limit
+    )
+    return [SubscriberRead.from_db(c, subs_map.get(c.id, [])) for c in customers]
 

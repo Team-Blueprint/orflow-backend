@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_async_db
-from app.plans.schemas import PlanCreate, PlanRead, PlanUpdate
+from app.plans.models import PlanStatus
+from app.plans.schemas import PlanCreate, PlanRead, PlanUpdate, PlanWithStatsRead
 from app.plans.service import PlanService
 from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
@@ -31,9 +32,9 @@ async def create_plan(
 
 @router.get(
     "/list", 
-    response_model=list[PlanRead],
+    response_model=list[PlanWithStatsRead],
     summary="List all plans",
-    description="Returns a paginated list of all plans for the current tenant."
+    description="Returns a paginated list of all plans for the current tenant, including subscription count and total collected revenue."
 )
 async def list_plans(
     active_only: bool = False,
@@ -42,15 +43,20 @@ async def list_plans(
     db: AsyncSession = Depends(get_async_db),
 ):
     service = PlanService(db)
+    rows = await service.list_with_stats(offset=offset, limit=limit)
+    result = [
+        PlanWithStatsRead(**PlanRead.model_validate(plan).model_dump(), subscription_count=sub_count, revenue=revenue)
+        for plan, sub_count, revenue in rows
+    ]
     if active_only:
-        return await service.list_active()
-    return await service.list(offset=offset, limit=limit)
+        result = [r for r in result if r.status == PlanStatus.active]
+    return result
 
 @router.get(
     "/{plan_id}", 
-    response_model=PlanRead,
+    response_model=PlanWithStatsRead,
     summary="Get a plan",
-    description="Fetches a specific plan by ID.",
+    description="Fetches a specific plan by ID, including subscription count and total collected revenue.",
     responses={
         404: {"model": ErrorResponse, "description": "Plan not found."}
     }
@@ -60,10 +66,11 @@ async def get_plan(
     db: AsyncSession = Depends(get_async_db),
 ):
     service = PlanService(db)
-    plan = await service.get(plan_id)
-    if plan is None:
+    result = await service.get_with_stats(plan_id)
+    if result is None:
         raise EntityNotFoundError("Plan", str(plan_id))
-    return plan
+    plan, sub_count, revenue = result
+    return PlanWithStatsRead(**PlanRead.model_validate(plan).model_dump(), subscription_count=sub_count, revenue=revenue)
 
 @router.patch(
     "/{plan_id}/update", 

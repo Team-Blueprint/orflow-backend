@@ -47,3 +47,15 @@ class PlanRead(BaseModel):
         if isinstance(v, int):
             return Decimal(v) / Decimal(100)
         return v
+
+
+class PlanWithStatsRead(PlanRead):
+    subscription_count: int
+    revenue: Decimal  # in major currency unit, from paid invoices
+
+    @field_validator("revenue", mode="before")
+    @classmethod
+    def convert_revenue_to_major(cls, v):
+        if isinstance(v, int):
+            return Decimal(v) / Decimal(100)
+        return v

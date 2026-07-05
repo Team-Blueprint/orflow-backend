@@ -1,8 +1,12 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.customers.models import Customer
 from app.db.repository import BaseRepository
+from app.plans.models import Plan
 from app.subscriptions.models import Subscription, SubscriptionStatus
 from app.subscriptions.schemas import (
     ChangePlanResponse,
@@ -351,3 +355,67 @@ class SubscriptionService(BaseRepository[Subscription]):
             charged=charged,
             payment_status=payment_status,
         )
+
+    async def list_by_project(
+        self,
+        project_id: uuid.UUID,
+        plan_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[tuple[Subscription, Plan]]:
+        stmt = (
+            select(Subscription, Plan)
+            .join(Customer, Subscription.customer_id == Customer.id)
+            .join(Plan, Subscription.plan_id == Plan.id)
+            .where(
+                Subscription.tenant_id == self._tenant_id(),
+                Customer.project_id == project_id,
+            )
+        )
+        if plan_id:
+            stmt = stmt.where(Subscription.plan_id == plan_id)
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.all())
+
+    async def list_subscribers_by_project(
+        self,
+        project_id: uuid.UUID,
+        plan_id: uuid.UUID | None = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> tuple[list[Customer], dict[uuid.UUID, list[tuple[Subscription, Plan]]]]:
+        customer_stmt = (
+            select(Customer)
+            .join(Subscription, Subscription.customer_id == Customer.id)
+            .where(
+                Customer.tenant_id == self._tenant_id(),
+                Customer.project_id == project_id,
+            )
+        )
+        if plan_id:
+            customer_stmt = customer_stmt.where(Subscription.plan_id == plan_id)
+        customer_stmt = customer_stmt.distinct().offset(offset).limit(limit)
+        customers = list((await self.session.execute(customer_stmt)).scalars().all())
+
+        if not customers:
+            return [], {}
+
+        customer_ids = [c.id for c in customers]
+        sub_stmt = (
+            select(Subscription, Plan)
+            .join(Plan, Subscription.plan_id == Plan.id)
+            .where(
+                Subscription.tenant_id == self._tenant_id(),
+                Subscription.customer_id.in_(customer_ids),
+            )
+        )
+        if plan_id:
+            sub_stmt = sub_stmt.where(Subscription.plan_id == plan_id)
+        sub_rows = list((await self.session.execute(sub_stmt)).all())
+
+        subs_by_customer: dict[uuid.UUID, list[tuple[Subscription, Plan]]] = {}
+        for sub, plan in sub_rows:
+            subs_by_customer.setdefault(sub.customer_id, []).append((sub, plan))
+
+        return customers, subs_by_customer
