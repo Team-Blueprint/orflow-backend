@@ -2,6 +2,7 @@ import base64
 import hmac
 import hashlib
 import json
+import logging
 
 from fastapi import APIRouter, Request, Header, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from app.db.database import get_async_db
 from app.core.config import settings
 from app.webhooks.schemas import NombaWebhookPayload
 from app.webhooks.service import process_nomba_webhook
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks/inbound", tags=["Webhooks"])
 
@@ -25,9 +28,16 @@ def _safe(val: object) -> str:
 
 async def verify_nomba_signature(
     request: Request,
-    nomba_signature: str = Header(..., alias="nomba-signature"),
+    nomba_signature: str = Header("", alias="nomba-signature"),
     nomba_timestamp: str = Header("", alias="nomba-timestamp"),
 ):
+    logger.info(
+        "Nomba webhook received: path=%s method=%s sig_prefix=%s ts=%s",
+        request.url.path,
+        request.method,
+        nomba_signature[:16] if nomba_signature else "none",
+        nomba_timestamp,
+    )
     if not settings.NOMBA_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
