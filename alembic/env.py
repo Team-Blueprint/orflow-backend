@@ -30,9 +30,6 @@ from app.db.base import Base
 
 config = context.config
 
-# Override sqlalchemy.url from our Settings (ignores the .ini value)
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
@@ -42,9 +39,8 @@ target_metadata = Base.metadata
 # Offline mode (generates SQL without a live connection)
 
 def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=settings.DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -68,8 +64,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    cfg = config.get_section(config.config_ini_section, {})
+    cfg["sqlalchemy.url"] = settings.DATABASE_URL
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        cfg,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
