@@ -3,6 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.deps import _require_tenant
+from app.core.exceptions import EntityNotFoundError, ErrorResponse
 from app.db.database import get_async_db
 from app.payment_methods.schemas import (
     PaymentMethodCreate,
@@ -10,9 +12,12 @@ from app.payment_methods.schemas import (
     PaymentMethodUpdate,
 )
 from app.payment_methods.service import PaymentMethodService
-from app.core.exceptions import EntityNotFoundError, ErrorResponse
 
-router = APIRouter(prefix="/payment-methods", tags=["payment_methods"])
+router = APIRouter(
+    prefix="/payment-methods",
+    tags=["payment_methods"],
+    dependencies=[Depends(_require_tenant)],
+)
 
 @router.post(
     "/create", 
