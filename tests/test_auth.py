@@ -673,16 +673,14 @@ async def test_google_callback_success(db_session: AsyncSession, auth_client):
                 mock_instance.get = AsyncMock(return_value=mock_userinfo)
 
                 resp = await auth_client.get(
-                    f"/v1/auth/google/callback?code=fakecode&state={state}"
+                    f"/v1/auth/google/callback?code=fakecode&state={state}",
+                    follow_redirects=False,
                 )
 
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["tenant"]["email"] == "oauth_test@example.com"
-        assert body["tenant"]["google_sub"] == "google_test_sub_1"
-        assert "access_token" in body
-
-        assert auth_client.cookies.get("access_token") is not None
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "http://localhost:5173/auth/google/callback"
+        assert resp.cookies.get("access_token") is not None
+        assert resp.cookies.get("refresh_token") is not None
     finally:
         settings.GOOGLE_CLIENT_ID = original_id
         settings.GOOGLE_CLIENT_SECRET = original_secret

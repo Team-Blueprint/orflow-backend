@@ -5,7 +5,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 import httpx
-from fastapi import HTTPException, Request, Response, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
@@ -79,7 +79,6 @@ def _verify_state(request: Request) -> None:
 
 async def handle_google_callback(
     request: Request,
-    response: Response,
     db: AsyncSession,
 ) -> tuple[dict, dict]:
     """Complete the Google OAuth flow.
@@ -88,8 +87,7 @@ async def handle_google_callback(
     2. Exchange the ``code`` for an access token.
     3. Fetch the user's Google profile.
     4. Create or link a Tenant via ``TenantService.google_auth``.
-    5. Clear the state cookie.
-    6. Return the tenant profile and JWT token pair.
+    5. Return the tenant profile and JWT token pair.
     """
     _verify_state(request)
 
@@ -149,13 +147,6 @@ async def handle_google_callback(
         google_sub=google_sub,
         email=email,
         name=name,
-    )
-
-    response.delete_cookie(
-        key=_STATE_COOKIE,
-        path="/v1/auth/google/callback",
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE.lower(),
     )
 
     return tenant, tokens

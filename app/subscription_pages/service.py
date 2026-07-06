@@ -29,6 +29,35 @@ class SubscriptionPageService(BaseRepository[SubscriptionPage]):
         )
         return result.scalar_one_or_none()
 
+    async def list_with_plan(self, offset: int = 0, limit: int = 100) -> list[tuple[SubscriptionPage, Plan]]:
+        stmt = (
+            select(SubscriptionPage, Plan)
+            .join(Plan, SubscriptionPage.plan_id == Plan.id)
+            .where(SubscriptionPage.tenant_id == self._tenant_id())
+        )
+        project_id = self._project_id()
+        if project_id is not None:
+            stmt = stmt.where(SubscriptionPage.project_id == project_id)
+        stmt = stmt.offset(offset).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.all())
+
+    async def get_with_plan(self, page_id: uuid.UUID) -> tuple[SubscriptionPage, Plan] | None:
+        stmt = (
+            select(SubscriptionPage, Plan)
+            .join(Plan, SubscriptionPage.plan_id == Plan.id)
+            .where(
+                SubscriptionPage.id == page_id,
+                SubscriptionPage.tenant_id == self._tenant_id(),
+            )
+        )
+        project_id = self._project_id()
+        if project_id is not None:
+            stmt = stmt.where(SubscriptionPage.project_id == project_id)
+        result = await self.session.execute(stmt)
+        row = result.one_or_none()
+        return row if row else None
+
     async def create_page(self, plan_id: uuid.UUID) -> SubscriptionPage:
         code = SubscriptionPage.generate_code()
         while await self.get_by_code(code):

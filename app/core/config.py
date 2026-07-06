@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 14
 
+    FRONTEND_URL: str = "https://orflow.vercel.app"
+
     # Cookie settings
     COOKIE_SECURE: bool = True
     COOKIE_SAMESITE: str = "none"

@@ -40,6 +40,7 @@ from app.tenants.schemas import (
 from app.tenants.service import TenantService, verify_access_token
 from app.tenants.google_service import google_login_redirect, handle_google_callback
 from app.core.exceptions import ErrorResponse
+from app.core.config import settings
 from app.core.cookies import set_auth_cookies, clear_auth_cookies
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -151,25 +152,31 @@ async def google_login():
 @router.get(
     "/google/callback",
     summary="Google OAuth callback",
-    description="Handles the OAuth callback from Google. Exchanges the code for tokens, creates/links the tenant, and sets auth cookies.",
+    description="Handles the OAuth callback from Google. Exchanges the code for tokens, creates/links the tenant, sets auth cookies, and redirects to the frontend.",
     responses={
-        200: {"model": SigninResponse, "description": "Authentication successful."},
+        307: {"description": "Redirect to frontend after successful authentication."},
         403: {"model": ErrorResponse, "description": "Invalid OAuth state (CSRF)."},
     },
+    response_class=RedirectResponse,
 )
 async def google_callback(
     request: Request,
-    response: Response,
     db: AsyncSession = Depends(get_async_db),
 ):
-    """Handle the OAuth callback from Google."""
-    tenant, tokens = await handle_google_callback(request, response, db)
-    set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
-    return SigninResponse(
-        tenant=TenantRead.model_validate(tenant),
-        access_token=tokens["access_token"],
-        refresh_token=tokens["refresh_token"],
+    """Handle the OAuth callback from Google and redirect to frontend."""
+    tenant, tokens = await handle_google_callback(request, db)
+    redirect = RedirectResponse(
+        url=f"{settings.FRONTEND_URL}/auth/google/callback",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
+    set_auth_cookies(redirect, tokens["access_token"], tokens["refresh_token"])
+    redirect.delete_cookie(
+        key="google_oauth_state",
+        path="/v1/auth/google/callback",
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE.lower(),
+    )
+    return redirect
 
 
 @router.post(
