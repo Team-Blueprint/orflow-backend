@@ -15,6 +15,13 @@ from app.tenants.models import Tenant
 
 KeyType = Literal["pk_test", "sk_test", "pk_live", "sk_live"]
 
+# Placeholder for Google-authenticated users who have no password.
+# An unrecognisable bcrypt hash that can never be produced by real input.
+_GOOGLE_PLACEHOLDER_PASSWORD = bcrypt.hashpw(
+    b"__google_oauth_no_password__",
+    bcrypt.gensalt(rounds=4),
+).decode()
+
 
 
 def _hash_password(plain: str) -> str:
@@ -102,6 +109,53 @@ class TenantService:
             name=name,
             email=email,
             hashed_password=hashed_password,
+        )
+        self.session.add(tenant)
+        await self.session.commit()
+        await self.session.refresh(tenant)
+
+        tokens = _issue_token_pair(tenant.id)
+        return tenant, tokens
+
+    async def google_auth(
+        self,
+        google_sub: str,
+        email: str,
+        name: str,
+    ) -> tuple[Tenant, dict]:
+        """Authenticate or register via Google OAuth.
+
+        1. Look up tenant by ``google_sub`` — if found, sign them in.
+        2. Fall back to lookup by ``email`` — if found, link the Google
+           account (set ``google_sub``) and sign them in.
+        3. Otherwise create a new tenant with a placeholder password.
+
+        Returns the tenant and a fresh JWT token pair.
+        """
+        tenant = await self._get_by_google_sub(google_sub)
+
+        if tenant is not None:
+            if not tenant.is_active:
+                raise ValueError("Tenant account is inactive")
+            tokens = _issue_token_pair(tenant.id)
+            return tenant, tokens
+
+        tenant = await self._get_by_email(email)
+
+        if tenant is not None:
+            if not tenant.is_active:
+                raise ValueError("Tenant account is inactive")
+            tenant.google_sub = google_sub
+            await self.session.commit()
+            await self.session.refresh(tenant)
+            tokens = _issue_token_pair(tenant.id)
+            return tenant, tokens
+
+        tenant = Tenant(
+            name=name,
+            email=email,
+            google_sub=google_sub,
+            hashed_password=_GOOGLE_PLACEHOLDER_PASSWORD,
         )
         self.session.add(tenant)
         await self.session.commit()
@@ -214,6 +268,12 @@ class TenantService:
     async def _get_by_email(self, email: str) -> Tenant | None:
         result = await self.session.execute(
             select(Tenant).where(Tenant.email == email)
+        )
+        return result.scalar_one_or_none()
+
+    async def _get_by_google_sub(self, google_sub: str) -> Tenant | None:
+        result = await self.session.execute(
+            select(Tenant).where(Tenant.google_sub == google_sub)
         )
         return result.scalar_one_or_none()
 

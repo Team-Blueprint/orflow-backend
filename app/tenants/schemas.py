@@ -29,6 +29,7 @@ class TenantRead(BaseModel):
     id: uuid.UUID
     name: str
     email: str
+    google_sub: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

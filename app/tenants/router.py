@@ -1,6 +1,8 @@
 """Auth & API key management router.
 
 Public endpoints (no API key or JWT required):
+    GET  /auth/google/login      — redirect to Google consent screen
+    GET  /auth/google/callback   — Google OAuth callback
     POST /auth/signup
     POST /auth/signin
     POST /auth/refresh
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_async_db
@@ -35,6 +38,7 @@ from app.tenants.schemas import (
     TenantRead,
 )
 from app.tenants.service import TenantService, verify_access_token
+from app.tenants.google_service import google_login_redirect, handle_google_callback
 from app.core.exceptions import ErrorResponse
 from app.core.cookies import set_auth_cookies, clear_auth_cookies
 
@@ -127,6 +131,46 @@ def _require_csrf(request: Request):
 
 
 # ── Public endpoints ───────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/google/login",
+    summary="Google OAuth login",
+    description="Redirects the browser to Google's consent screen. A CSRF-protecting state parameter is set as an http-only cookie.",
+    responses={
+        307: {"description": "Redirect to Google OAuth consent screen."}
+    },
+    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    response_class=RedirectResponse,
+)
+async def google_login():
+    """Redirect to Google's OAuth consent screen."""
+    return google_login_redirect()
+
+
+@router.get(
+    "/google/callback",
+    summary="Google OAuth callback",
+    description="Handles the OAuth callback from Google. Exchanges the code for tokens, creates/links the tenant, and sets auth cookies.",
+    responses={
+        200: {"model": SigninResponse, "description": "Authentication successful."},
+        403: {"model": ErrorResponse, "description": "Invalid OAuth state (CSRF)."},
+    },
+)
+async def google_callback(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Handle the OAuth callback from Google."""
+    tenant, tokens = await handle_google_callback(request, response, db)
+    set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
+    return SigninResponse(
+        tenant=TenantRead.model_validate(tenant),
+        access_token=tokens["access_token"],
+        refresh_token=tokens["refresh_token"],
+    )
+
 
 @router.post(
     "/signup",

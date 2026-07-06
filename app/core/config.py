@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite+aiosqlite:///./sub_eng.db"
+    DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/dbname"
     REDIS_URL: str = "redis://localhost:6379"
 
     # Sandbox/production base URL. Override per environment via .env.
@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     NOMBA_HTTP_TIMEOUT: float = 30.0
     NOMBA_TOKEN_LEEWAY_SECONDS: int = 300
     NOMBA_WEBHOOK_SECRET: str = ""
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/v1/auth/google/callback"
     DUNNING_GRACE_DAYS: int = 14
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
