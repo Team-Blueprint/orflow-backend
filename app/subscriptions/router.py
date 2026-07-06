@@ -178,7 +178,7 @@ async def list_subscriptions(
     rows = await svc.list_by_project(
         _project.id, plan_id=plan_id, offset=offset, limit=limit
     )
-    return [SubscriptionWithPlanRead.from_db(sub, plan) for sub, plan in rows]
+    return [SubscriptionWithPlanRead.from_db(sub, customer, plan) for sub, customer, plan in rows]
 
 @router.get(
     "/subscribers/list",

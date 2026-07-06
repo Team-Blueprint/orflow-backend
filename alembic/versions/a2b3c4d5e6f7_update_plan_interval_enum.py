@@ -18,6 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.alter_column("plans", "interval", type_=sa.String(10))
     op.execute("UPDATE plans SET interval = 'daily' WHERE interval = 'day'")
     op.execute("UPDATE plans SET interval = 'weekly' WHERE interval = 'week'")
     op.execute("UPDATE plans SET interval = 'monthly' WHERE interval = 'month'")
@@ -29,3 +30,4 @@ def downgrade() -> None:
     op.execute("UPDATE plans SET interval = 'week' WHERE interval = 'weekly'")
     op.execute("UPDATE plans SET interval = 'month' WHERE interval = 'monthly'")
     op.execute("UPDATE plans SET interval = 'year' WHERE interval = 'yearly'")
+    op.alter_column("plans", "interval", type_=sa.String(5))

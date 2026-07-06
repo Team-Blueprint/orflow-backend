@@ -24,6 +24,7 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     pk_test: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     sk_test: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)

@@ -14,12 +14,15 @@ from app.subscription_pages.models import SubscriptionPage
 from app.subscription_pages.schemas import (
     PublicCheckoutRequest,
     PublicCheckoutResponse,
+    PublicPageInfo,
     PublicPlanInfo,
     SubscriptionPageCreate,
     SubscriptionPageRead,
     SubscriptionPageUpdate,
+    SubscriptionPageWithPlanRead,
 )
 from app.subscription_pages.service import SubscriptionPageService, public_checkout_flow
+from app.tenants.models import Tenant
 
 router = APIRouter(
     prefix="/subscription-pages",
@@ -60,7 +63,7 @@ async def create_subscription_page(
 
 @router.get(
     "/list",
-    response_model=list[SubscriptionPageRead],
+    response_model=list[SubscriptionPageWithPlanRead],
     summary="List subscription pages",
     description="Returns all subscription pages for the current tenant and project.",
 )
@@ -70,12 +73,13 @@ async def list_subscription_pages(
     db: AsyncSession = Depends(get_async_db),
 ):
     svc = SubscriptionPageService(db)
-    return await svc.list(offset=offset, limit=limit)
+    rows = await svc.list_with_plan(offset=offset, limit=limit)
+    return [SubscriptionPageWithPlanRead.from_db(page, plan) for page, plan in rows]
 
 
 @router.get(
     "/{page_id}",
-    response_model=SubscriptionPageRead,
+    response_model=SubscriptionPageWithPlanRead,
     summary="Get a subscription page",
     description="Fetches a specific subscription page by ID.",
     responses={
@@ -87,10 +91,11 @@ async def get_subscription_page(
     db: AsyncSession = Depends(get_async_db),
 ):
     svc = SubscriptionPageService(db)
-    page = await svc.get(page_id)
-    if not page:
+    row = await svc.get_with_plan(page_id)
+    if not row:
         raise EntityNotFoundError("SubscriptionPage", str(page_id))
-    return page
+    page, plan = row
+    return SubscriptionPageWithPlanRead.from_db(page, plan)
 
 
 @router.patch(
@@ -137,7 +142,7 @@ async def delete_subscription_page(
 
 @public_router.get(
     "/code/{code}",
-    response_model=PublicPlanInfo,
+    response_model=PublicPageInfo,
     summary="Get plan info by page code (public)",
     description="Public endpoint that returns plan details for a given subscription page code. Used by the checkout frontend to render the page.",
     responses={
@@ -165,7 +170,23 @@ async def get_plan_by_code(
     if not plan:
         raise EntityNotFoundError("Plan", str(page.plan_id))
 
-    return plan
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == plan.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+    if not tenant:
+        raise EntityNotFoundError("Tenant", str(plan.tenant_id))
+
+    return PublicPageInfo(
+        id=page.id,
+        plan_id=plan.id,
+        name=plan.name,
+        amount=plan.amount,
+        currency=plan.currency,
+        interval=plan.interval,
+        interval_count=plan.interval_count,
+        merchant_name=tenant.name,
+    )
 
 
 @public_router.post(

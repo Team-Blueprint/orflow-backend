@@ -362,9 +362,9 @@ class SubscriptionService(BaseRepository[Subscription]):
         plan_id: uuid.UUID | None = None,
         offset: int = 0,
         limit: int = 100,
-    ) -> list[tuple[Subscription, Plan]]:
+    ) -> list[tuple[Subscription, Customer, Plan]]:
         stmt = (
-            select(Subscription, Plan)
+            select(Subscription, Customer, Plan)
             .join(Customer, Subscription.customer_id == Customer.id)
             .join(Plan, Subscription.plan_id == Plan.id)
             .where(

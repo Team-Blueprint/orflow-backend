@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "sqlite+aiosqlite:///./sub_eng.db"
+    DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/dbname"
     REDIS_URL: str = "redis://localhost:6379"
 
     # Sandbox/production base URL. Override per environment via .env.
@@ -22,11 +22,16 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_CLIENT_SECRET: str = ""
     NOMBA_SANDBOX_ACCOUNT_ID: str = ""
     NOMBA_SANDBOX_CALLBACK_URL: str = "https://example.com/nomba/callback"
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/v1/auth/google/callback"
     DUNNING_GRACE_DAYS: int = 14
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 14
+
+    FRONTEND_URL: str = "https://orflow.vercel.app"
 
     # Cookie settings
     COOKIE_SECURE: bool = True

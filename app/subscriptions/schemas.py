@@ -114,9 +114,10 @@ class SubscriptionWithPlanRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     plan: PlanBrief
+    customer: CustomerBrief
 
     @classmethod
-    def from_db(cls, subscription, plan):
+    def from_db(cls, subscription, customer, plan):
         return cls(
             id=subscription.id,
             customer_id=subscription.customer_id,
@@ -132,6 +133,7 @@ class SubscriptionWithPlanRead(BaseModel):
             created_at=subscription.created_at,
             updated_at=subscription.updated_at,
             plan=PlanBrief.model_validate(plan),
+            customer=CustomerBrief.model_validate(customer),
         )
 
 
@@ -151,5 +153,5 @@ class SubscriberRead(BaseModel):
             name=customer.name,
             external_id=customer.external_id,
             created_at=customer.created_at,
-            subscriptions=[SubscriptionWithPlanRead.from_db(s, p) for s, p in subscriptions],
+            subscriptions=[SubscriptionWithPlanRead.from_db(s, customer, p) for s, p in subscriptions],
         )

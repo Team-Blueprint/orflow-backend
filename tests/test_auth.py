@@ -15,7 +15,10 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from unittest.mock import MagicMock, patch, AsyncMock
+
 from app.db.database import get_async_db
+from app.tenants.service import TenantService
 from main import app
 
 
@@ -511,3 +514,173 @@ async def test_keys_still_viewable_after_revocation(auth_client):
     )
     assert keys.json()["sk_live"] == sk_live_value  # value retained
     assert keys.json()["sk_live_active"] is False    # but flagged as inactive
+
+
+# ── Google OAuth (service layer) ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_google_auth_creates_new_tenant(db_session: AsyncSession):
+    """google_auth creates a new tenant when no match exists."""
+    service = TenantService(db_session)
+    tenant, tokens = await service.google_auth(
+        google_sub="google123",
+        email="new@example.com",
+        name="New Google User",
+    )
+    assert tenant.email == "new@example.com"
+    assert tenant.name == "New Google User"
+    assert tenant.google_sub == "google123"
+    assert tenant.is_active is True
+    assert "access_token" in tokens
+    assert "refresh_token" in tokens
+
+
+@pytest.mark.asyncio
+async def test_google_auth_links_existing_email(db_session: AsyncSession):
+    """google_auth links an existing tenant by email if google_sub is new."""
+    service = TenantService(db_session)
+    existing, _ = await service.signup(
+        name="Existing", email="existing@example.com", password="password123"
+    )
+    assert existing.google_sub is None
+
+    tenant, tokens = await service.google_auth(
+        google_sub="google456",
+        email="existing@example.com",
+        name="Existing Linked",
+    )
+    assert tenant.id == existing.id
+    assert tenant.google_sub == "google456"
+    assert "access_token" in tokens
+
+
+@pytest.mark.asyncio
+async def test_google_auth_reuses_google_sub(db_session: AsyncSession):
+    """google_auth returns the same tenant when google_sub already exists."""
+    service = TenantService(db_session)
+    tenant1, _ = await service.google_auth(
+        google_sub="google789",
+        email="first@example.com",
+        name="First",
+    )
+    tenant2, tokens = await service.google_auth(
+        google_sub="google789",
+        email="different@example.com",
+        name="Second",
+    )
+    assert tenant2.id == tenant1.id
+    assert tenant2.email == "first@example.com"  # original email preserved
+    assert "access_token" in tokens
+
+
+@pytest.mark.asyncio
+async def test_google_auth_raises_for_inactive_tenant(db_session: AsyncSession):
+    """google_auth raises ValueError for inactive tenants."""
+    service = TenantService(db_session)
+    tenant, _ = await service.signup(
+        name="Inactive", email="inactive@example.com", password="password123"
+    )
+    tenant.is_active = False
+    await db_session.commit()
+
+    with pytest.raises(ValueError, match="inactive"):
+        await service.google_auth(
+            google_sub="google_inactive",
+            email="inactive@example.com",
+            name="Inactive",
+        )
+
+
+# ── Google OAuth (endpoints) ──────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_google_login_redirect(auth_client):
+    """GET /auth/google/login returns a 307 redirect to Google."""
+    from app.core.config import settings
+    # Ensure settings are configured for the test
+    original_id = settings.GOOGLE_CLIENT_ID
+    settings.GOOGLE_CLIENT_ID = "test-client-id"
+    try:
+        resp = await auth_client.get("/v1/auth/google/login", follow_redirects=False)
+        assert resp.status_code == 307
+        location = resp.headers.get("location", "")
+        assert location.startswith("https://accounts.google.com/o/oauth2/v2/auth")
+        assert "client_id=test-client-id" in location
+        assert "response_type=code" in location
+        # State cookie should be set
+        assert auth_client.cookies.get("google_oauth_state") is not None
+    finally:
+        settings.GOOGLE_CLIENT_ID = original_id
+
+
+@pytest.mark.asyncio
+async def test_google_callback_missing_code_returns_400(auth_client):
+    """GET /auth/google/callback without code returns 400."""
+    # Set a matching state cookie so we pass the CSRF check
+    auth_client.cookies.set("google_oauth_state", "valid_state", path="/v1/auth/google/callback")
+    resp = await auth_client.get("/v1/auth/google/callback?state=valid_state")
+    assert resp.status_code == 400
+    assert "code" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_google_callback_invalid_state_returns_403(auth_client):
+    """GET /auth/google/callback with mismatched state returns 403."""
+    resp = await auth_client.get(
+        "/v1/auth/google/callback?code=testcode&state=bogus"
+    )
+    assert resp.status_code == 403
+    assert "state" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_google_callback_success(db_session: AsyncSession, auth_client):
+    """Full callback flow with mocked authlib succeeds and sets cookies."""
+    from app.core.config import settings
+
+    original_id = settings.GOOGLE_CLIENT_ID
+    original_secret = settings.GOOGLE_CLIENT_SECRET
+    settings.GOOGLE_CLIENT_ID = "test-client-id"
+    settings.GOOGLE_CLIENT_SECRET = "test-client-secret"
+
+    try:
+        login_resp = await auth_client.get(
+            "/v1/auth/google/login", follow_redirects=False
+        )
+        assert login_resp.status_code == 307
+
+        state = auth_client.cookies.get("google_oauth_state")
+        assert state is not None
+
+        mock_userinfo = MagicMock()
+        mock_userinfo.is_success = True
+        mock_userinfo.json.return_value = {
+            "sub": "google_test_sub_1",
+            "email": "oauth_test@example.com",
+            "name": "OAuth Test User",
+        }
+
+        with patch("app.tenants.google_service._oauth_client") as mock_oauth_fac:
+            mock_client = MagicMock()
+            mock_oauth_fac.return_value = mock_client
+            mock_client.fetch_token.return_value = {
+                "access_token": "fake_access_token",
+            }
+
+            with patch("app.tenants.google_service.httpx.AsyncClient") as mock_httpx:
+                mock_instance = AsyncMock()
+                mock_httpx.return_value.__aenter__.return_value = mock_instance
+                mock_instance.get = AsyncMock(return_value=mock_userinfo)
+
+                resp = await auth_client.get(
+                    f"/v1/auth/google/callback?code=fakecode&state={state}",
+                    follow_redirects=False,
+                )
+
+        assert resp.status_code == 307
+        assert resp.headers["location"] == "http://localhost:5173/auth/google/callback"
+        assert resp.cookies.get("access_token") is not None
+        assert resp.cookies.get("refresh_token") is not None
+    finally:
+        settings.GOOGLE_CLIENT_ID = original_id
+        settings.GOOGLE_CLIENT_SECRET = original_secret
