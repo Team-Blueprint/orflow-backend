@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -46,6 +46,7 @@ class Invoice(Base):
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     # --- Dunning / failed-payment recovery  ---
     # When set, a retry is scheduled: the billing/dunning worker re-attempts the

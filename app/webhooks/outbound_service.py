@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.webhooks.models import WebhookEndpoint, OutboundWebhookEvent, WebhookDeliveryAttempt
 from app.webhooks.schemas import WebhookEndpointCreate
+from app.core.context import current_is_test
 
 async def create_webhook_endpoint(
     session: AsyncSession, tenant_id: uuid.UUID, endpoint_in: WebhookEndpointCreate
@@ -15,7 +16,8 @@ async def create_webhook_endpoint(
         url=endpoint_in.url,
         secret=secrets.token_hex(32),
         description=endpoint_in.description,
-        is_active=True
+        is_active=True,
+        is_test=current_is_test.get(),
     )
     session.add(endpoint)
     await session.commit()
@@ -25,8 +27,12 @@ async def create_webhook_endpoint(
 async def get_webhook_endpoints(
     session: AsyncSession, tenant_id: uuid.UUID
 ) -> Sequence[WebhookEndpoint]:
+    is_test = current_is_test.get()
     result = await session.execute(
-        select(WebhookEndpoint).where(WebhookEndpoint.tenant_id == tenant_id)
+        select(WebhookEndpoint).where(
+            WebhookEndpoint.tenant_id == tenant_id,
+            WebhookEndpoint.is_test == is_test,
+        )
     )
     return result.scalars().all()
 

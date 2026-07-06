@@ -9,7 +9,7 @@ from app.core.request_id import RequestIDMiddleware
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.idempotency import IdempotencyMiddleware
 from app.db.database import engine
-from app.providers.deps import close_payment_provider, init_payment_provider
+from app.providers.deps import close_payment_providers, init_payment_providers
 #alembic config
 import app.tenants.models
 import app.customers.models
@@ -39,9 +39,9 @@ from fastapi import Request, HTTPException
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_payment_provider()
+    await init_payment_providers()
     yield
-    await close_payment_provider()
+    await close_payment_providers()
     await engine.dispose()
 
 

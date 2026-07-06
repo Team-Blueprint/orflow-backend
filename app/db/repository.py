@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_project_id, current_is_test, current_tenant_id
 from app.db.base import Base
 
 ModelT = TypeVar("ModelT", bound=Base)
@@ -33,10 +33,16 @@ class BaseRepository(Generic[ModelT]):
     def _project_id(self) -> UUID | None:
         return current_project_id.get()
 
+    def _is_test(self) -> bool:
+        return current_is_test.get()
+
     def _base_query(self):
         query = select(self.model).where(
-            self.model.tenant_id == self._tenant_id()  # type: ignore[attr-defined]
+            self.model.tenant_id == self._tenant_id(),  # type: ignore[attr-defined]
         )
+        if hasattr(self.model, "is_test"):
+            query = query.where(self.model.is_test == self._is_test())  # type: ignore[attr-defined]
+            
         project_id = self._project_id()
         if project_id is not None and hasattr(self.model, "project_id") and getattr(self.model, "__project_scoped__", True):
             query = query.where(self.model.project_id == project_id)  # type: ignore[attr-defined]
@@ -61,6 +67,8 @@ class BaseRepository(Generic[ModelT]):
 
     async def create(self, **kwargs) -> ModelT:
         kwargs.setdefault("tenant_id", self._tenant_id())
+        if hasattr(self.model, "is_test"):
+            kwargs.setdefault("is_test", self._is_test())
         if hasattr(self.model, "project_id") and "project_id" not in kwargs and getattr(self.model, "__project_scoped__", True):
             project_id = self._project_id()
             if project_id is not None:
