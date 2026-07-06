@@ -60,6 +60,11 @@ def _parse_cors_origins(origins_str: str) -> list[str]:
     return [origin.strip() for origin in origins_str.split(",") if origin.strip()]
 
 
+app.add_middleware(IdempotencyMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(TenantAuthMiddleware)
+app.add_middleware(RequestIDMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_cors_origins(settings.CORS_ORIGINS),
@@ -67,11 +72,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Project-ID", "X-API-Key"],
 )
-
-app.add_middleware(IdempotencyMiddleware)
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(TenantAuthMiddleware)
-app.add_middleware(RequestIDMiddleware)
 
 app.include_router(tenants_router, prefix="/v1")
 app.include_router(customers_router, prefix="/v1")
