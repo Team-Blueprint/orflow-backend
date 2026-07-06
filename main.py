@@ -21,6 +21,7 @@ import app.audit.models
 import app.webhooks.models
 import app.reconciliation.models
 import app.projects.models
+import app.subscription_pages.models
 from app.tenants.router import router as tenants_router
 from app.customers.router import router as customers_router
 from app.plans.router import router as plans_router
@@ -30,6 +31,8 @@ from app.webhooks.router import router as webhooks_router
 from app.webhooks.outbound_router import router as outbound_webhooks_router
 from app.reconciliation.router import router as reconciliation_router
 from app.projects.router import router as projects_router
+from app.subscription_pages.router import router as subscription_pages_router
+from app.subscription_pages.router import public_router as subscription_pages_public_router
 from app.core.exceptions import EntityNotFoundError, InvalidStateTransition
 from fastapi.responses import JSONResponse
 from fastapi import Request, HTTPException
@@ -79,6 +82,8 @@ app.include_router(webhooks_router, prefix="/v1")
 app.include_router(outbound_webhooks_router, prefix="/v1")
 app.include_router(reconciliation_router, prefix="/v1")
 app.include_router(projects_router, prefix="/v1")
+app.include_router(subscription_pages_router, prefix="/v1")
+app.include_router(subscription_pages_public_router, prefix="/v1")
 
 @app.exception_handler(EntityNotFoundError)
 async def entity_not_found_handler(request: Request, exc: EntityNotFoundError):

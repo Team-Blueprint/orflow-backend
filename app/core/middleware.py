@@ -20,6 +20,7 @@ _EXEMPT_PREFIXES = (
     "/v1/auth/",
     "/v1/projects/",
     "/v1/webhooks/inbound/",
+    "/v1/subscription-pages/code/",
     "/docs",
     "/redoc",
     "/openapi.json",
