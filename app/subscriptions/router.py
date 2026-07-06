@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_async_db
-from app.providers.base import PaymentProviderAdapter
-from app.providers.deps import get_payment_provider
-from app.core.deps import _require_project
+from app.providers.deps import get_payment_provider_for_mode
+from app.core.context import current_is_test
+from app.core.deps import _require_project, _require_tenant
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 from app.projects.models import Project
 from app.subscriptions.schemas import (
@@ -23,7 +23,11 @@ from app.subscriptions.service import SubscriptionService
 
 
 
-router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
+router = APIRouter(
+    prefix="/subscriptions", 
+    tags=["subscriptions"],
+    dependencies=[Depends(_require_tenant)]
+)
 
 @router.post(
     "/create", 
@@ -39,8 +43,8 @@ router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 async def create_subscription(
     payload: SubscriptionCreate,
     session: AsyncSession = Depends(get_async_db),
-    provider: PaymentProviderAdapter = Depends(get_payment_provider),
 ):
+    provider = get_payment_provider_for_mode(current_is_test.get())
     svc = SubscriptionService(session)
     return await svc.create_subscription_flow(payload, provider)
 
@@ -116,8 +120,8 @@ async def change_plan(
     subscription_id: uuid.UUID,
     payload: ChangePlanRequest,
     session: AsyncSession = Depends(get_async_db),
-    provider: PaymentProviderAdapter = Depends(get_payment_provider),
 ):
+    provider = get_payment_provider_for_mode(current_is_test.get())
     svc = SubscriptionService(session)
     return await svc.change_plan_flow(subscription_id, payload.new_plan_id, provider)
 

@@ -1,9 +1,13 @@
 import uuid
 from datetime import datetime, timezone
 
+from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
+
+if TYPE_CHECKING:
+    from app.invoices.models import Invoice
 
 from app.db.base import Base
 from app.providers.base import PaymentStatus, FailureReason
@@ -45,6 +49,7 @@ class PaymentAttempt(Base):
 
     provider_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -64,6 +69,7 @@ class WebhookEndpoint(Base):
     secret: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -90,6 +96,7 @@ class OutboundWebhookEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     
     status: Mapped[OutboundEventStatus] = mapped_column(Enum(OutboundEventStatus, native_enum=False), default=OutboundEventStatus.pending, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 

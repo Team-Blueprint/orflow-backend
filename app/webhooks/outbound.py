@@ -29,18 +29,19 @@ async def enqueue_webhook_event(
     tenant_id: uuid.UUID,
     event_type: str,
     payload: dict | None = None,
+    is_test: bool = False,
 ) -> None:
     """Queue an outbound webhook event for ``tenant_id``.
 
-    it records intent so callers can be written
-    against the final interface. ``session`` is accepted now so the eventual
-    implementation can persist a queued ``WebhookEvent`` row in the caller's
-    transaction without a signature change.
+    ``is_test`` mirrors the API key environment that triggered the event.
+    Events with ``is_test=True`` are only delivered to endpoints registered
+    with a test-mode key; live events go only to live endpoints.
     """
     logger.info(
-        "Outbound webhook queued: %s tenant=%s payload=%s",
+        "Outbound webhook queued: %s tenant=%s is_test=%s payload=%s",
         event_type,
         tenant_id,
+        is_test,
         payload or {},
     )
     
@@ -51,10 +52,10 @@ async def enqueue_webhook_event(
         tenant_id=tenant_id,
         event_type=event_type,
         payload=payload or {},
-        status=OutboundEventStatus.pending
+        status=OutboundEventStatus.pending,
+        is_test=is_test,
     )
     session.add(event)
-    await session.flush() # flush to get the UUID
+    await session.flush()  # flush to get the UUID
     
-    # In real app, you might use arq directly. We enqueue it using the tasks wrapper.
     await enqueue_webhook_delivery(event.id)

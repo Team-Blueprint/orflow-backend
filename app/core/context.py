@@ -15,10 +15,14 @@ current_tenant_id: ContextVar[UUID | None] = ContextVar(
 
 # Identifies which API key slot was used to authenticate this request.
 # Values: "pk_test" | "sk_test" | "pk_live" | "sk_live" | None
-# Useful for enforcing live/test mode restrictions per-endpoint in the future.
 current_key_type: ContextVar[str | None] = ContextVar(
     "current_key_type", default=None
 )
+
+# True when the request was authenticated with a test-mode API key (pk_test / sk_test).
+# False for live-mode keys (pk_live / sk_live) and JWT-authenticated requests.
+# Set by TenantAuthMiddleware; consumed by BaseRepository and provider routing.
+current_is_test: ContextVar[bool] = ContextVar("current_is_test", default=False)
 
 # Holds the active project's ID for the duration of a request.
 # Set by _require_project dependency; consumed by BaseRepository to auto-filter queries.

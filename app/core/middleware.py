@@ -11,14 +11,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.core.context import current_key_type, current_tenant_id
+from app.core.context import current_key_type, current_is_test, current_tenant_id
 from app.db.database import AsyncSessionLocal
 
 # Paths that require no API key — auth endpoints, docs, health, inbound webhooks.
 # Update these whenever a new public path is added or the /v1 prefix changes.
 _EXEMPT_PREFIXES = (
     "/v1/auth/",
-    "/v1/projects/",
     "/v1/webhooks/inbound/",
     "/v1/subscription-pages/code/",
     "/docs",
@@ -49,11 +48,15 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         api_key = request.headers.get("X-API-Key")
-        if not api_key:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Missing X-API-Key header"},
-            )
+        if not api_key or not (api_key.startswith("pk_") or api_key.startswith("sk_")):
+            # Fallback for dashboard/JWT requests: Allow the request to proceed
+            # so `_require_tenant` can validate the JWT. Read `X-Test-Mode` to set environment.
+            is_test = request.headers.get("X-Test-Mode", "false").lower() == "true"
+            it_token = current_is_test.set(is_test)
+            try:
+                return await call_next(request)
+            finally:
+                current_is_test.reset(it_token)
 
         # Late import avoids circular dependency at module load time.
         from app.tenants.models import Tenant
@@ -88,10 +91,14 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
 
         t_token = current_tenant_id.set(tenant.id)
         k_token = current_key_type.set(matched_key_type)
+        it_token = current_is_test.set(
+            matched_key_type.endswith("_test") if matched_key_type else False
+        )
         try:
             response = await call_next(request)
         finally:
             current_tenant_id.reset(t_token)
             current_key_type.reset(k_token)
+            current_is_test.reset(it_token)
 
         return response

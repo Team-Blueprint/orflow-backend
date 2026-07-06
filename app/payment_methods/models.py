@@ -43,5 +43,6 @@ class PaymentMethod(Base):
     expiry_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expiry_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False,)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),onupdate=lambda: datetime.now(timezone.utc),nullable=False,)

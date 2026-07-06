@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     NOMBA_HTTP_TIMEOUT: float = 30.0
     NOMBA_TOKEN_LEEWAY_SECONDS: int = 300
     NOMBA_WEBHOOK_SECRET: str = ""
+
+    # Nomba sandbox credentials — used for all test-mode (pk_test / sk_test) requests.
+    # Set these in your .env alongside the live credentials above.
+    NOMBA_SANDBOX_BASE_URL: str = "https://api-sandbox.nomba.com"
+    NOMBA_SANDBOX_CLIENT_ID: str = ""
+    NOMBA_SANDBOX_CLIENT_SECRET: str = ""
+    NOMBA_SANDBOX_ACCOUNT_ID: str = ""
+    NOMBA_SANDBOX_CALLBACK_URL: str = "https://example.com/nomba/callback"
     DUNNING_GRACE_DAYS: int = 14
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"

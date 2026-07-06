@@ -69,6 +69,7 @@ class ReconciliationDiscrepancy(Base):
         DateTime(timezone=True), nullable=True,
     )
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
