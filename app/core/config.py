@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_BASE_URL: str = "https://api-sandbox.nomba.com"
     NOMBA_SANDBOX_CLIENT_ID: str = ""
     NOMBA_SANDBOX_CLIENT_SECRET: str = ""
+    NOMBA_SANDBOX_ACCOUNT_ID: str = ""
     NOMBA_SANDBOX_CALLBACK_URL: str = "https://example.com/nomba/callback"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_DAYS: int = 14
 
     FRONTEND_URL: str = "https://orflow.vercel.app"
+
+    # Brevo Email Settings
+    BREVO_API_KEY: str = ""
+    DEFAULT_FROM_EMAIL: str = "noreply@example.com"
 
     # Cookie settings
     COOKIE_SECURE: bool = True
