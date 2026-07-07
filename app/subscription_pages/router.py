@@ -8,8 +8,7 @@ from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 from app.db.database import get_async_db
 from app.plans.models import Plan
-from app.providers.base import PaymentProviderAdapter
-from app.providers.deps import get_payment_provider
+
 from app.subscription_pages.models import SubscriptionPage
 from app.subscription_pages.schemas import (
     PublicCheckoutRequest,
@@ -186,6 +185,7 @@ async def get_plan_by_code(
         interval=plan.interval,
         interval_count=plan.interval_count,
         merchant_name=tenant.name,
+        is_test=page.is_test,
     )
 
 
@@ -203,13 +203,11 @@ async def checkout_by_code(
     code: str,
     payload: PublicCheckoutRequest,
     db: AsyncSession = Depends(get_async_db),
-    provider: PaymentProviderAdapter = Depends(get_payment_provider),
 ):
     result = await public_checkout_flow(
         code=code,
         name=payload.name,
         email=payload.email,
         session=db,
-        provider=provider,
     )
     return result

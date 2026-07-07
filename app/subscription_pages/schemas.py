@@ -12,6 +12,7 @@ class SubscriptionPageCreate(BaseModel):
 class SubscriptionPageUpdate(BaseModel):
     plan_id: uuid.UUID | None = None
     is_active: bool | None = None
+    is_test: bool | None = None
 
 
 class SubscriptionPageRead(BaseModel):
@@ -21,6 +22,7 @@ class SubscriptionPageRead(BaseModel):
     plan_id: uuid.UUID
     code: str
     is_active: bool
+    is_test: bool
     created_at: datetime
     updated_at: datetime
 
@@ -34,6 +36,7 @@ class SubscriptionPageWithPlanRead(BaseModel):
     plan_id: uuid.UUID
     code: str
     is_active: bool
+    is_test: bool
     created_at: datetime
     updated_at: datetime
     plan_name: str
@@ -48,6 +51,7 @@ class SubscriptionPageWithPlanRead(BaseModel):
             plan_id=page.plan_id,
             code=page.code,
             is_active=page.is_active,
+            is_test=page.is_test,
             created_at=page.created_at,
             updated_at=page.updated_at,
             plan_name=plan.name,
@@ -81,6 +85,7 @@ class PublicPageInfo(BaseModel):
     interval: PlanInterval
     interval_count: int
     merchant_name: str
+    is_test: bool
 
     @field_validator("amount", mode="before")
     @classmethod

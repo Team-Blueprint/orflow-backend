@@ -16,6 +16,7 @@ class SubscriptionPage(Base):
     plan_id: Mapped[uuid.UUID] = mapped_column(Uuid(native_uuid=False), ForeignKey("plans.id", ondelete="CASCADE"), nullable=False)
     code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

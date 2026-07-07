@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.context import current_project_id, current_tenant_id
+from app.core.context import current_is_test, current_project_id, current_tenant_id
+from app.providers.deps import get_payment_provider_for_mode
 from app.core.exceptions import EntityNotFoundError
 from app.customers.service import CustomerService
 from app.db.repository import BaseRepository
 from app.invoices.models import InvoiceStatus
 from app.invoices.service import InvoiceService
 from app.plans.models import Plan, PlanInterval
-from app.providers.base import PaymentProviderAdapter
 from app.subscription_pages.models import SubscriptionPage
 from app.subscriptions.models import SubscriptionStatus, SubscriptionType
 from app.subscriptions.service import SubscriptionService
@@ -70,7 +70,6 @@ async def public_checkout_flow(
     name: str,
     email: str,
     session: AsyncSession,
-    provider: PaymentProviderAdapter,
 ) -> dict:
     result = await session.execute(
         select(SubscriptionPage).where(
@@ -93,7 +92,9 @@ async def public_checkout_flow(
     project_token = None
     if page.project_id:
         project_token = current_project_id.set(page.project_id)
+    is_test_token = current_is_test.set(page.is_test)
     try:
+        provider = get_payment_provider_for_mode(page.is_test)
         customer_svc = CustomerService(session)
         customer = await customer_svc.get_by_email(email)
         if not customer:
@@ -160,3 +161,4 @@ async def public_checkout_flow(
         current_tenant_id.reset(tenant_token)
         if project_token:
             current_project_id.reset(project_token)
+        current_is_test.reset(is_test_token)
