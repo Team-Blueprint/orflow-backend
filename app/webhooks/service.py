@@ -33,8 +33,8 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
     order_data = payload.data.order or {}
 
     # Nomba echoes back the orderReference we sent (invoice.id) in
-    # transaction.merchantTxRef for tokenized-card events, and in
-    # data.order.orderReference for hosted-checkout callbacks.
+    # transaction.merchantTxRef for tokenized-card/tokenized-card-payment events,
+    # and in data.order.orderReference for the hosted-checkout callback.
     order_reference = (
         transaction_data.get("merchantTxRef")
         or order_data.get("orderReference")
