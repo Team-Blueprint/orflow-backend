@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import httpx
+import jwt
 from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
@@ -21,8 +23,7 @@ _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
 _SCOPE = "openid email profile"
 
-_STATE_COOKIE = "google_oauth_state"
-_STATE_MAX_AGE = 600  # 10 minutes
+_STATE_MAX_AGE_SECONDS = 600  # 10 minutes
 
 
 def _oauth_client() -> _OAuth2Client:
@@ -37,12 +38,23 @@ def _oauth_client() -> _OAuth2Client:
 def google_login_redirect() -> RedirectResponse:
     """Build a RedirectResponse to Google's consent screen.
 
-    Sets a state cookie for CSRF protection.
+    Uses a self-contained JWT-signed state instead of a cookie, so the
+    state survives cross-domain redirects without depending on the cookie
+    domain matching the callback domain.
     """
     from authlib.common.security import generate_token
 
     client = _oauth_client()
-    state = generate_token()
+    nonce = generate_token()
+
+    state = jwt.encode(
+        {
+            "nonce": nonce,
+            "exp": datetime.now(timezone.utc) + timedelta(seconds=_STATE_MAX_AGE_SECONDS),
+        },
+        settings.JWT_SECRET,
+        algorithm=settings.JWT_ALGORITHM,
+    )
 
     authorize_url, _ = client.create_authorization_url(
         url=_GOOGLE_AUTHORIZE_URL,
@@ -51,26 +63,35 @@ def google_login_redirect() -> RedirectResponse:
         scope=_SCOPE,
     )
 
-    redirect = RedirectResponse(
+    return RedirectResponse(
         url=authorize_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT
     )
-    redirect.set_cookie(
-        key=_STATE_COOKIE,
-        value=state,
-        httponly=True,
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE.lower(),
-        max_age=_STATE_MAX_AGE,
-        path="/v1/auth/google/callback",
-    )
-    return redirect
 
 
 def _verify_state(request: Request) -> None:
-    """Validate state parameter to prevent CSRF on the callback."""
-    expected = request.cookies.get(_STATE_COOKIE)
+    """Validate state parameter to prevent CSRF on the callback.
+
+    The state is a signed JWT, so verification is stateless — no cookie
+    or server-side storage needed.
+    """
     actual = request.query_params.get("state")
-    if not expected or not actual or expected != actual:
+    if not actual:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid OAuth state parameter — possible CSRF attack",
+        )
+    try:
+        jwt.decode(
+            actual,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OAuth state expired — please try again",
+        )
+    except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid OAuth state parameter — possible CSRF attack",

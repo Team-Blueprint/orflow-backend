@@ -44,7 +44,7 @@ async def init_payment_providers() -> None:
         NOMBA_BASE_URL=default_settings.NOMBA_SANDBOX_BASE_URL,
         NOMBA_CLIENT_ID=default_settings.NOMBA_SANDBOX_CLIENT_ID,
         NOMBA_CLIENT_SECRET=default_settings.NOMBA_SANDBOX_CLIENT_SECRET,
-        NOMBA_ACCOUNT_ID=default_settings.NOMBA_SANDBOX_ACCOUNT_ID,
+        NOMBA_ACCOUNT_ID=default_settings.NOMBA_ACCOUNT_ID,
         NOMBA_CALLBACK_URL=default_settings.NOMBA_SANDBOX_CALLBACK_URL,
         # Inherit all non-Nomba settings (timeouts, JWT, DB, etc.)
         NOMBA_HTTP_TIMEOUT=default_settings.NOMBA_HTTP_TIMEOUT,

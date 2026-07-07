@@ -170,12 +170,6 @@ async def google_callback(
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
     set_auth_cookies(redirect, tokens["access_token"], tokens["refresh_token"])
-    redirect.delete_cookie(
-        key="google_oauth_state",
-        path="/v1/auth/google/callback",
-        secure=settings.COOKIE_SECURE,
-        samesite=settings.COOKIE_SAMESITE.lower(),
-    )
     return redirect
 
 

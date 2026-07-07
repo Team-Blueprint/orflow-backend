@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_BASE_URL: str = "https://api-sandbox.nomba.com"
     NOMBA_SANDBOX_CLIENT_ID: str = ""
     NOMBA_SANDBOX_CLIENT_SECRET: str = ""
-    NOMBA_SANDBOX_ACCOUNT_ID: str = ""
     NOMBA_SANDBOX_CALLBACK_URL: str = "https://example.com/nomba/callback"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
