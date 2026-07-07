@@ -30,12 +30,13 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     JWT_REFRESH_EXPIRE_DAYS: int = 14
+    PORTAL_JWT_EXPIRE_MINUTES: int = 60
 
     FRONTEND_URL: str = "https://orflow.vercel.app"
 
     # Brevo Email Settings
     BREVO_API_KEY: str = ""
-    DEFAULT_FROM_EMAIL: str = "noreply@example.com"
+    DEFAULT_FROM_EMAIL: str = "abasiofon135@gmail.com"
 
     # Cookie settings
     COOKIE_SECURE: bool = True

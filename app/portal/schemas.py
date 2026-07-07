@@ -1,12 +1,48 @@
-from pydantic import BaseModel, Field
+import uuid
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
 
-class VerifyAccessRequest(BaseModel):
-    token_slug: str = Field(..., description="The unique token slug for portal access")
-    pin: str = Field(..., description="The clear-text PIN")
 
-class VerifyAccessResponse(BaseModel):
-    access_token: str
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
-class UpdatePinRequest(BaseModel):
+class PortalVerifyRequest(BaseModel):
+    token_slug: str
+    pin: str
+
+
+class PortalVerifyResponse(BaseModel):
+    portal_session_token: str
+
+
+class PortalUpdatePinRequest(BaseModel):
     current_pin: str
-    new_pin: str = Field(..., min_length=6)
+    new_pin: str
+
+
+# ── Subscription view ─────────────────────────────────────────────────────────
+
+class PortalSubscriptionRead(BaseModel):
+    subscription_id: uuid.UUID
+    plan_name: str
+    status: str
+    amount: int
+    currency: str
+    next_charge_date: Optional[datetime]
+    card_last4: Optional[str]
+    card_brand: Optional[str]
+
+
+# ── Payment history ───────────────────────────────────────────────────────────
+
+class PortalPaymentRead(BaseModel):
+    date: datetime
+    amount: int
+    currency: str
+    status: str
+
+
+# ── Update card ───────────────────────────────────────────────────────────────
+
+class PortalUpdateCardRequest(BaseModel):
+    payment_token: str

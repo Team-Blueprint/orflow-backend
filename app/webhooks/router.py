@@ -38,6 +38,10 @@ async def verify_nomba_signature(
         nomba_signature[:16] if nomba_signature else "none",
         nomba_timestamp,
     )
+
+    if not nomba_signature or not nomba_timestamp:
+        raise HTTPException(status_code=400, detail="Missing Nomba signature headers")
+
     if not settings.NOMBA_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
@@ -72,17 +76,23 @@ async def verify_nomba_signature(
 
     if not hmac.compare_digest(computed, nomba_signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
-    return True
+
+    # Parse body once and attach to request.state — avoids consuming the stream
+    # a second time when FastAPI tries to fill in a Pydantic body parameter.
+    try:
+        request.state.nomba_payload = NombaWebhookPayload(**body)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid payload shape: {exc}")
 
 
 @router.post("/nomba")
 async def nomba_webhook(
     request: Request,
-    payload: NombaWebhookPayload,
     session: AsyncSession = Depends(get_async_db),
-    _ = Depends(verify_nomba_signature),
+    _: None = Depends(verify_nomba_signature),
 ):
-    event_id = request.headers.get("nomba-event-id") or request.headers.get("nomba-signature", "")
+    payload: NombaWebhookPayload = request.state.nomba_payload
+    event_id = payload.requestId or request.headers.get("nomba-signature", "")
 
     await process_nomba_webhook(session, event_id, payload)
 

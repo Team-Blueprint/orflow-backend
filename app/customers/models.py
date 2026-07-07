@@ -35,6 +35,8 @@ class Customer(Base):
     # Portal Access
     portal_token_slug: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     portal_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    card_last4: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    card_brand: Mapped[str | None] = mapped_column(String(32), nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False,)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False,)
