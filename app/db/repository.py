@@ -40,9 +40,7 @@ class BaseRepository(Generic[ModelT]):
         query = select(self.model).where(
             self.model.tenant_id == self._tenant_id(),  # type: ignore[attr-defined]
         )
-        if hasattr(self.model, "is_test"):
-            query = query.where(self.model.is_test == self._is_test())  # type: ignore[attr-defined]
-            
+
         project_id = self._project_id()
         if project_id is not None and hasattr(self.model, "project_id") and getattr(self.model, "__project_scoped__", True):
             query = query.where(self.model.project_id == project_id)  # type: ignore[attr-defined]
