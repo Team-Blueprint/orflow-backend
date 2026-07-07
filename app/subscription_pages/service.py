@@ -12,6 +12,7 @@ from app.db.repository import BaseRepository
 from app.invoices.models import InvoiceStatus
 from app.invoices.service import InvoiceService
 from app.plans.models import Plan, PlanInterval
+from app.projects.models import Project
 from app.subscription_pages.models import SubscriptionPage
 from app.subscriptions.models import SubscriptionStatus, SubscriptionType
 from app.subscriptions.service import SubscriptionService
@@ -29,10 +30,11 @@ class SubscriptionPageService(BaseRepository[SubscriptionPage]):
         )
         return result.scalar_one_or_none()
 
-    async def list_with_plan(self, offset: int = 0, limit: int = 100) -> list[tuple[SubscriptionPage, Plan]]:
+    async def list_with_plan(self, offset: int = 0, limit: int = 100) -> list[tuple[SubscriptionPage, Plan, str | None]]:
         stmt = (
-            select(SubscriptionPage, Plan)
+            select(SubscriptionPage, Plan, Project.name)
             .join(Plan, SubscriptionPage.plan_id == Plan.id)
+            .outerjoin(Project, SubscriptionPage.project_id == Project.id)
             .where(SubscriptionPage.tenant_id == self._tenant_id())
         )
         project_id = self._project_id()
@@ -42,10 +44,11 @@ class SubscriptionPageService(BaseRepository[SubscriptionPage]):
         result = await self.session.execute(stmt)
         return list(result.all())
 
-    async def get_with_plan(self, page_id: uuid.UUID) -> tuple[SubscriptionPage, Plan] | None:
+    async def get_with_plan(self, page_id: uuid.UUID) -> tuple[SubscriptionPage, Plan, str | None] | None:
         stmt = (
-            select(SubscriptionPage, Plan)
+            select(SubscriptionPage, Plan, Project.name)
             .join(Plan, SubscriptionPage.plan_id == Plan.id)
+            .outerjoin(Project, SubscriptionPage.project_id == Project.id)
             .where(
                 SubscriptionPage.id == page_id,
                 SubscriptionPage.tenant_id == self._tenant_id(),

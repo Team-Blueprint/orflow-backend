@@ -73,7 +73,7 @@ async def list_subscription_pages(
 ):
     svc = SubscriptionPageService(db)
     rows = await svc.list_with_plan(offset=offset, limit=limit)
-    return [SubscriptionPageWithPlanRead.from_db(page, plan) for page, plan in rows]
+    return [SubscriptionPageWithPlanRead.from_db(page, plan, project_name) for page, plan, project_name in rows]
 
 
 @router.get(
@@ -93,8 +93,8 @@ async def get_subscription_page(
     row = await svc.get_with_plan(page_id)
     if not row:
         raise EntityNotFoundError("SubscriptionPage", str(page_id))
-    page, plan = row
-    return SubscriptionPageWithPlanRead.from_db(page, plan)
+    page, plan, project_name = row
+    return SubscriptionPageWithPlanRead.from_db(page, plan, project_name)
 
 
 @router.patch(

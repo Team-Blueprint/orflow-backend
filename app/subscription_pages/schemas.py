@@ -40,10 +40,11 @@ class SubscriptionPageWithPlanRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     plan_name: str
+    project_name: str | None = None
     url: str
 
     @classmethod
-    def from_db(cls, page, plan):
+    def from_db(cls, page, plan, project_name=None):
         return cls(
             id=page.id,
             tenant_id=page.tenant_id,
@@ -55,6 +56,7 @@ class SubscriptionPageWithPlanRead(BaseModel):
             created_at=page.created_at,
             updated_at=page.updated_at,
             plan_name=plan.name,
+            project_name=project_name,
             url=f"/subscribe/{page.code}",
         )
 
