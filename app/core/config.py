@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_CALLBACK_URL: str = "https://example.com/nomba/callback"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/v1/auth/google/callback"
+    GOOGLE_REDIRECT_URI: str = "https://orflow.vercel.app/api/auth/google/callback"
     DUNNING_GRACE_DAYS: int = 14
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
