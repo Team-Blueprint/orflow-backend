@@ -115,6 +115,26 @@ async def public_checkout_flow(
             type=SubscriptionType.installment if plan.installments_count else SubscriptionType.recurring,
         )
 
+        if not customer.portal_token_slug:
+            import secrets
+            from app.portal.service import hash_pin
+            from app.worker.tasks import enqueue_email
+            from app.core.email_templates import get_portal_access_template
+
+            token_slug = secrets.token_urlsafe(32)
+            raw_pin = str(secrets.randbelow(1000000)).zfill(6)
+            customer.portal_token_slug = token_slug
+            customer.portal_pin_hash = hash_pin(raw_pin)
+            session.add(customer)
+            await session.commit()
+            
+            html_content = get_portal_access_template(customer.name, token_slug, raw_pin)
+            await enqueue_email(
+                to=customer.email,
+                subject="Welcome to your Self-Service Portal",
+                html=html_content
+            )
+
         invoice_svc = InvoiceService(session)
         now = datetime.now(timezone.utc)
         delta_kwargs = {}

@@ -22,3 +22,18 @@ def get_invoice_receipt_template(
         amount_formatted=amount_formatted,
         paid_at_str=paid_at_str
     )
+
+def get_portal_access_template(
+    customer_name: str, 
+    token_slug: str, 
+    raw_pin: str
+) -> str:
+    """Returns the HTML template for the portal access email."""
+    from app.core.config import settings
+    template = env.get_template("portal_access.html")
+    access_link = f"{settings.FRONTEND_URL}/portal/access/{token_slug}"
+    return template.render(
+        customer_name=customer_name,
+        accessUrl=access_link,
+        generatedPin=raw_pin
+    )
