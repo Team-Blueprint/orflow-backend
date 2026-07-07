@@ -241,6 +241,8 @@ class NombaProvider(PaymentProviderAdapter):
             "callbackUrl": callback_url or self._settings.NOMBA_CALLBACK_URL,
             "amount": _minor_to_major_str(amount_minor),
             "currency": currency,
+            "accountId": self._settings.NOMBA_ACCOUNT_ID,
+            "allowedPaymentMethods": ["Card", "Transfer"],
         }
         if customer_id:
             order["customerId"] = customer_id
@@ -282,6 +284,7 @@ class NombaProvider(PaymentProviderAdapter):
             "callbackUrl": callback_url or self._settings.NOMBA_CALLBACK_URL,
             "amount": _minor_to_major_str(amount_minor),
             "currency": currency,
+            "accountId": self._settings.NOMBA_ACCOUNT_ID,
         }
         if customer_id:
             order["customerId"] = customer_id
