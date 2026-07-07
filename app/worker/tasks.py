@@ -237,3 +237,27 @@ async def deliver_webhook_job(ctx: Dict[str, Any], event_id: uuid.UUID):
             event.status = OutboundEventStatus.successful
             
         await session.commit()
+
+async def enqueue_email(to: str, subject: str, html: str):
+    """
+    Enqueue an asynchronous job to send an email via Brevo.
+    """
+    pool = await get_arq_pool()
+    await pool.enqueue_job('send_email_job', to, subject, html)
+
+async def send_email_job(ctx: Dict[str, Any], to: str, subject: str, html: str):
+    """
+    Arq worker job to send an email asynchronously using Brevo.
+    """
+    from app.core.email import send_email_async
+    
+    logger.info("Sending email to %s", to)
+    try:
+        await send_email_async(to, subject, html)
+        logger.info("Successfully sent email to %s", to)
+    except Exception as e:
+        logger.error("Failed to send email to %s: %s", to, e)
+        from arq import Retry
+        if ctx.get('job_try', 1) < 3:
+            raise Retry(defer=timedelta(minutes=1))
+        raise

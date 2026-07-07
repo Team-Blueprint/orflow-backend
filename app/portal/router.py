@@ -1,0 +1,322 @@
+"""Portal router — public auth + session-scoped subscription management."""
+import uuid
+import logging
+
+import bcrypt
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.context import current_tenant_id
+from app.db.database import get_async_db
+from app.customers.models import Customer
+from app.subscriptions.models import Subscription, SubscriptionStatus
+from app.subscriptions.state_machine import transition_subscription
+from app.invoices.models import Invoice, InvoiceStatus
+from app.payment_methods.models import PaymentMethod, PaymentMethodType
+from app.payment_methods.service import PaymentMethodService
+from app.plans.models import Plan
+from app.webhooks.models import PaymentAttempt
+
+from app.portal.schemas import (
+    PortalVerifyRequest,
+    PortalVerifyResponse,
+    PortalUpdatePinRequest,
+    PortalSubscriptionRead,
+    PortalPaymentRead,
+    PortalUpdateCardRequest,
+)
+from app.portal import service as portal_svc
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/v1/portal", tags=["Portal"])
+
+_bearer = HTTPBearer(auto_error=False)
+
+
+# ── Session token dependency ──────────────────────────────────────────────────
+
+async def _portal_session(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict:
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing portal session token")
+    try:
+        return portal_svc.decode_portal_session_token(credentials.credentials)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Portal session expired")
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid portal token: {exc}")
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/verify-access",
+    response_model=PortalVerifyResponse,
+    summary="Verify portal token slug + PIN",
+    description="Authenticates a customer by their portal_token_slug and PIN. Returns a short-lived portal_session_token (JWT).",
+)
+async def verify_access(
+    payload: PortalVerifyRequest,
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer = await portal_svc.get_customer_by_slug(db, payload.token_slug)
+    if not customer or not customer.portal_pin_hash:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if not portal_svc.verify_pin(payload.pin, customer.portal_pin_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Find the customer's most recent active subscription
+    sub_result = await db.execute(
+        select(Subscription)
+        .where(Subscription.customer_id == customer.id)
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No subscription found")
+
+    token = portal_svc.create_portal_session_token(
+        customer_id=str(customer.id),
+        subscription_id=str(subscription.id),
+    )
+    return PortalVerifyResponse(portal_session_token=token)
+
+
+@router.post(
+    "/update-pin",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Change portal PIN",
+    description="Validates the current PIN then replaces it with the new one.",
+)
+async def update_pin(
+    payload: PortalUpdatePinRequest,
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer_id = uuid.UUID(session_claims["sub"])
+    result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = result.scalar_one_or_none()
+    if not customer or not customer.portal_pin_hash:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    if not portal_svc.verify_pin(payload.current_pin, customer.portal_pin_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current PIN is incorrect")
+
+    customer.portal_pin_hash = portal_svc.hash_pin(payload.new_pin)
+    await db.commit()
+
+
+# ── Subscription view ─────────────────────────────────────────────────────────
+
+@router.get(
+    "/subscriptions/me",
+    response_model=PortalSubscriptionRead,
+    summary="Get my subscription",
+    description="Returns the subscription linked to the current portal session.",
+)
+async def get_my_subscription(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+    customer_id = uuid.UUID(session_claims["sub"])
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    plan_result = await db.execute(select(Plan).where(Plan.id == subscription.plan_id))
+    plan = plan_result.scalar_one_or_none()
+
+    cust_result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = cust_result.scalar_one_or_none()
+
+    return PortalSubscriptionRead(
+        subscription_id=subscription.id,
+        plan_name=plan.name if plan else "Unknown",
+        status=subscription.status.value,
+        amount=plan.amount if plan else 0,
+        currency=plan.currency if plan else "NGN",
+        next_charge_date=subscription.current_period_end,
+        card_last4=customer.card_last4 if customer else None,
+        card_brand=customer.card_brand if customer else None,
+    )
+
+
+@router.get(
+    "/subscriptions/me/payments",
+    response_model=list[PortalPaymentRead],
+    summary="Get my payment history",
+    description="Returns a ledger of payment attempts for the portal session's subscription.",
+)
+async def get_my_payments(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+
+    # Get all invoices for this subscription
+    inv_result = await db.execute(
+        select(Invoice).where(Invoice.subscription_id == subscription_id)
+    )
+    invoices = inv_result.scalars().all()
+    invoice_ids = [inv.id for inv in invoices]
+    invoice_map = {inv.id: inv for inv in invoices}
+
+    if not invoice_ids:
+        return []
+
+    # Get payment attempts for those invoices
+    attempt_result = await db.execute(
+        select(PaymentAttempt)
+        .where(PaymentAttempt.invoice_id.in_(invoice_ids))
+        .order_by(PaymentAttempt.created_at.desc())
+    )
+    attempts = attempt_result.scalars().all()
+
+    return [
+        PortalPaymentRead(
+            date=attempt.created_at,
+            amount=invoice_map[attempt.invoice_id].amount_due,
+            currency=invoice_map[attempt.invoice_id].currency,
+            status=attempt.status.value,
+        )
+        for attempt in attempts
+        if attempt.invoice_id in invoice_map
+    ]
+
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/subscriptions/pause",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Pause subscription",
+)
+async def pause_subscription(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    token = current_tenant_id.set(subscription.tenant_id)
+    try:
+        await transition_subscription(db, subscription, SubscriptionStatus.paused, reason="customer_portal")
+    finally:
+        current_tenant_id.reset(token)
+    await db.commit()
+
+
+@router.post(
+    "/subscriptions/resume",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Resume subscription",
+)
+async def resume_subscription(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    token = current_tenant_id.set(subscription.tenant_id)
+    try:
+        await transition_subscription(db, subscription, SubscriptionStatus.active, reason="customer_portal")
+    finally:
+        current_tenant_id.reset(token)
+    await db.commit()
+
+
+@router.post(
+    "/subscriptions/cancel",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancel subscription",
+)
+async def cancel_subscription(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+
+    token = current_tenant_id.set(subscription.tenant_id)
+    try:
+        await transition_subscription(db, subscription, SubscriptionStatus.canceled, reason="customer_portal")
+    finally:
+        current_tenant_id.reset(token)
+    await db.commit()
+
+
+# ── Update card ───────────────────────────────────────────────────────────────
+
+@router.post(
+    "/subscriptions/update-card",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Update payment card",
+    description="Registers the new card token as a payment method, sets it as default, and updates the display card metadata on the customer record.",
+)
+async def update_card(
+    payload: PortalUpdateCardRequest,
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer_id = uuid.UUID(session_claims["sub"])
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+
+    cust_result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = cust_result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+
+    token = current_tenant_id.set(customer.tenant_id)
+    try:
+        pm_svc = PaymentMethodService(db)
+
+        # Create the new payment method from the token
+        pm = await pm_svc.create(
+            customer_id=customer.id,
+            type=PaymentMethodType.card,
+            provider_token=payload.payment_token,
+            is_default=False,
+        )
+
+        # Set it as the default for this customer
+        await pm_svc.set_default(pm.id)
+
+        # Link it to the subscription
+        if subscription:
+            subscription.payment_method_id = pm.id
+
+        await db.commit()
+        await db.refresh(pm)
+
+        # Update display metadata on the customer row
+        if pm.last_four:
+            customer.card_last4 = pm.last_four
+        if pm.card_brand:  # type: ignore[attr-defined]
+            customer.card_brand = pm.card_brand  # type: ignore[attr-defined]
+        await db.commit()
+
+    finally:
+        current_tenant_id.reset(token)

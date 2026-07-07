@@ -1,5 +1,7 @@
 import logging
 import re
+import secrets
+import uuid as uuid_mod
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +17,7 @@ from app.core.context import current_tenant_id
 from app.dunning.service import clear_dunning, open_or_advance_dunning
 from app.webhooks.outbound import enqueue_webhook_event
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
+from app.customers.models import Customer
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,37 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
                         "(token=%s, last_four=%s)",
                         invoice.customer_id, tokenized_data.tokenKey, last_four,
                     )
+
+            # Update card_last4 / card_brand on the customer row for portal display
+            if tokenized_data and tokenized_data.tokenKey:
+                cust_stmt = select(Customer).where(Customer.id == invoice.customer_id)
+                cust = (await session.execute(cust_stmt)).scalar_one_or_none()
+                if cust:
+                    if last_four:
+                        cust.card_last4 = last_four
+                    if tokenized_data.cardType:
+                        cust.card_brand = tokenized_data.cardType
+                    await session.flush()
+
+            # Generate portal access credentials on first successful payment
+            cust_stmt = select(Customer).where(Customer.id == invoice.customer_id)
+            cust = (await session.execute(cust_stmt)).scalar_one_or_none()
+            if cust and not cust.portal_token_slug:
+                import bcrypt
+                raw_pin = str(secrets.randbelow(900000) + 100000)  # 6-digit PIN
+                cust.portal_token_slug = secrets.token_hex(32)
+                cust.portal_pin_hash = bcrypt.hashpw(raw_pin.encode(), bcrypt.gensalt()).decode()
+                await session.flush()
+                logger.info(
+                    "Generated portal credentials for customer %s (slug=%s)",
+                    cust.id, cust.portal_token_slug,
+                )
+                # Dispatch onboarding email via portal service
+                try:
+                    from app.portal.service import send_portal_onboarding_email
+                    await send_portal_onboarding_email(cust, raw_pin)
+                except Exception as e:
+                    logger.warning("Portal onboarding email failed for %s: %s", cust.id, e)
 
         elif payment_status == PaymentStatus.failed:
             await open_or_advance_dunning(

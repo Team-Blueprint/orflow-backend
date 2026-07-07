@@ -31,14 +31,16 @@ class WorkerSettings:
         schedule_trial_activation,
         deliver_webhook_job,
         activate_trial_subscription_job,
-        expire_incomplete_subscription_job
+        expire_incomplete_subscription_job,
+        send_email_job
     )
     functions = [
         schedule_subscription_expiry,
         schedule_trial_activation,
         deliver_webhook_job,
         activate_trial_subscription_job,
-        expire_incomplete_subscription_job
+        expire_incomplete_subscription_job,
+        send_email_job
     ]
 
 

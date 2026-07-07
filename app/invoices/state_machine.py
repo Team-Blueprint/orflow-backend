@@ -76,6 +76,27 @@ async def transition_invoice(
     await session.commit()
     await session.refresh(invoice)
     
+    # Send invoice receipt email if it transitioned to paid
+    if new_status is I.paid:
+        from app.customers.models import Customer
+        from app.worker.tasks import enqueue_email
+        from app.core.email_templates import get_invoice_receipt_template
+        
+        customer = await session.get(Customer, invoice.customer_id)
+        if customer:
+            amount_formatted = f"{invoice.amount_due / 100:.2f}"
+            subject = f"Receipt for Invoice {invoice.id}"
+            paid_at_str = invoice.paid_at.strftime('%Y-%m-%d %H:%M:%S UTC') if invoice.paid_at else ''
+            
+            html_content = get_invoice_receipt_template(
+                customer_name=customer.name,
+                invoice_id=str(invoice.id),
+                currency=invoice.currency.upper(),
+                amount_formatted=amount_formatted,
+                paid_at_str=paid_at_str
+            )
+            await enqueue_email(to=customer.email, subject=subject, html=html_content)
+    
     # Check for installment completion
     if new_status is I.paid and invoice.subscription_id:
         from sqlalchemy import select

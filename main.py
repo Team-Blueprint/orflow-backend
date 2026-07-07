@@ -38,6 +38,7 @@ from app.projects.router import router as projects_router
 from app.analytics.router import router as analytics_router
 from app.subscription_pages.router import router as subscription_pages_router
 from app.subscription_pages.router import public_router as subscription_pages_public_router
+from app.portal.router import router as portal_router
 from app.core.exceptions import EntityNotFoundError, InvalidStateTransition
 from fastapi.responses import JSONResponse
 from fastapi import Request, HTTPException
@@ -90,6 +91,7 @@ app.include_router(projects_router, prefix="/v1")
 app.include_router(analytics_router, prefix="/v1")
 app.include_router(subscription_pages_router, prefix="/v1")
 app.include_router(subscription_pages_public_router, prefix="/v1")
+app.include_router(portal_router)
 
 @app.exception_handler(EntityNotFoundError)
 async def entity_not_found_handler(request: Request, exc: EntityNotFoundError):
