@@ -42,6 +42,9 @@ async def verify_nomba_signature(
     headers_dict = dict(request.headers)
     logger.info("Nomba webhook headers: %s", headers_dict)
 
+    if not nomba_signature or not nomba_timestamp:
+        raise HTTPException(status_code=400, detail="Missing Nomba signature headers")
+
     if not settings.NOMBA_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
@@ -85,17 +88,26 @@ async def verify_nomba_signature(
 
     if not hmac.compare_digest(computed, nomba_signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
-    return True
+
+    # Parse and attach the validated payload to request.state so the endpoint
+    # handler can use it without reading the body a second time (the stream is
+    # only readable once).
+    try:
+        request.state.nomba_payload = NombaWebhookPayload(**body)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid payload shape: {exc}")
 
 
 @router.post("/nomba")
 async def nomba_webhook(
     request: Request,
-    payload: NombaWebhookPayload,
     session: AsyncSession = Depends(get_async_db),
-    _ = Depends(verify_nomba_signature),
+    _: None = Depends(verify_nomba_signature),
 ):
-    event_id = request.headers.get("nomba-event-id") or request.headers.get("nomba-signature", "")
+    payload: NombaWebhookPayload = request.state.nomba_payload
+    # Use requestId from the body as the idempotency key (it is the stable unique
+    # identifier Nomba documents; fall back to nomba-signature if absent).
+    event_id = payload.requestId or request.headers.get("nomba-signature", "")
 
     logger.info(
         "Nomba webhook parsed payload: event_id=%s event_type=%s requestId=%s data=%s",
