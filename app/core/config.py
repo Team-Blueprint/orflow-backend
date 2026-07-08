@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     NOMBA_CLIENT_ID: str = ""
     NOMBA_CLIENT_SECRET: str = ""
     NOMBA_ACCOUNT_ID: str = ""
-    NOMBA_CALLBACK_URL: str = "https://orflow.vercel.app/dashboard"
+    NOMBA_CALLBACK_URL: str = "https://orflow.vercel.app/portal"
     NOMBA_HTTP_TIMEOUT: float = 30.0
     NOMBA_TOKEN_LEEWAY_SECONDS: int = 300
     NOMBA_WEBHOOK_SECRET: str = ""
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_BASE_URL: str = "https://api-sandbox.nomba.com"
     NOMBA_SANDBOX_CLIENT_ID: str = ""
     NOMBA_SANDBOX_CLIENT_SECRET: str = ""
-    NOMBA_SANDBOX_CALLBACK_URL: str = "https://orflow.vercel.app/dashboard"
+    NOMBA_SANDBOX_CALLBACK_URL: str = "https://orflow.vercel.app/portal"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "https://orflow.vercel.app/api/auth/google/callback"

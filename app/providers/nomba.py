@@ -253,6 +253,13 @@ class NombaProvider(PaymentProviderAdapter):
         )
         data = (body or {}).get("data") or {}
         checkout_link = data.get("checkoutLink")
+        logger.info(
+            "Nomba checkout response: code=%s description=%s checkoutLink=%s orderReference=%s",
+            (body or {}).get("code"),
+            (body or {}).get("description"),
+            checkout_link,
+            data.get("orderReference"),
+        )
         if (body or {}).get("code") != _SUCCESS_CODE or not checkout_link:
             raise ProviderError(
                 f"Nomba did not return a checkout link "
