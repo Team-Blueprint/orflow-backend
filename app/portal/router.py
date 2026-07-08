@@ -14,7 +14,10 @@ from app.db.database import get_async_db
 from app.customers.models import Customer
 from app.subscriptions.models import Subscription, SubscriptionStatus
 from app.subscriptions.state_machine import transition_subscription
+from app.invoices.state_machine import transition_invoice
 from app.invoices.models import Invoice, InvoiceStatus
+from app.providers.deps import get_payment_provider_for_mode
+from app.providers.base import PaymentStatus
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
 from app.payment_methods.service import PaymentMethodService
 from app.plans.models import Plan
@@ -27,6 +30,7 @@ from app.portal.schemas import (
     PortalSubscriptionRead,
     PortalPaymentRead,
     PortalUpdateCardRequest,
+    VerifyCheckoutResponse,
 )
 from app.portal import service as portal_svc
 
@@ -111,6 +115,82 @@ async def update_pin(
 
     customer.portal_pin_hash = portal_svc.hash_pin(payload.new_pin)
     await db.commit()
+
+
+# ── Verify checkout (callback from Nomba) ─────────────────────────────────────
+
+@router.get(
+    "/verify-checkout",
+    response_model=VerifyCheckoutResponse,
+    summary="Verify checkout payment after callback redirect",
+    description=(
+        "Called by the portal frontend after Nomba redirects the customer back to "
+        "the callback URL. Verifies the transaction with Nomba and, if successful, "
+        "updates the invoice and subscription status. This is a safety net when the "
+        "webhook hasn't arrived yet."
+    ),
+)
+async def verify_checkout(
+    orderReference: str,
+    db: AsyncSession = Depends(get_async_db),
+):
+    # Find the invoice by order reference
+    inv_result = await db.execute(
+        select(Invoice).where(Invoice.id == orderReference)
+    )
+    invoice = inv_result.scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Already paid — nothing to do
+    if invoice.status == InvoiceStatus.paid:
+        return VerifyCheckoutResponse(success=True, status="paid", subscription_id=invoice.subscription_id)
+
+    # Get provider for the right environment (sandbox vs live)
+    provider = get_payment_provider_for_mode(invoice.is_test)
+
+    # Verify with Nomba
+    result = await provider.verify_checkout_transaction(
+        order_reference=str(invoice.id),
+    )
+
+    if result.status != PaymentStatus.success:
+        logger.info("Checkout verify: payment not successful (%s)", result.status.value)
+        return VerifyCheckoutResponse(success=False, status="failed", subscription_id=invoice.subscription_id)
+
+    # Payment confirmed — update invoice and subscription
+    tenant_token = current_tenant_id.set(invoice.tenant_id)
+    try:
+        await transition_invoice(db, invoice, InvoiceStatus.paid, actor="verify_checkout")
+
+        # Find subscription
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.id == invoice.subscription_id)
+        )
+        subscription = sub_result.scalar_one_or_none()
+        if subscription and subscription.status in (
+            SubscriptionStatus.incomplete,
+            SubscriptionStatus.past_due,
+        ):
+            await transition_subscription(
+                db, subscription, SubscriptionStatus.active,
+                reason="payment_verified", actor="verify_checkout",
+            )
+
+        await db.commit()
+
+        logger.info(
+            "Checkout verify: invoice %s marked paid, subscription %s activated",
+            invoice.id, invoice.subscription_id,
+        )
+
+        return VerifyCheckoutResponse(
+            success=True,
+            status="paid",
+            subscription_id=invoice.subscription_id,
+        )
+    finally:
+        current_tenant_id.reset(tenant_token)
 
 
 # ── Subscription view ─────────────────────────────────────────────────────────

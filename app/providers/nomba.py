@@ -395,6 +395,32 @@ class NombaProvider(PaymentProviderAdapter):
             raw=body,
         )
 
+    async def verify_checkout_transaction(self, *, order_reference: str) -> TransactionStatus:
+        body = await self._authed_request(
+            "GET",
+            f"/v1/checkout/transaction?idType=ORDER_REFERENCE&id={order_reference}",
+        )
+        data = (body or {}).get("data") or {}
+        success = data.get("success") is True
+        message = data.get("message") or (body or {}).get("description")
+        order = data.get("order") or {}
+
+        if success:
+            status = PaymentStatus.success
+            failure_reason = None
+        else:
+            status = PaymentStatus.failed
+            failure_reason = FailureReason.generic_decline
+
+        return TransactionStatus(
+            status=status,
+            provider_reference=order.get("orderReference") or order_reference,
+            amount_minor=_major_to_minor(order.get("amount")),
+            failure_reason=failure_reason,
+            message=message,
+            raw=body,
+        )
+
     async def fetch_transactions(
         self,
         *,

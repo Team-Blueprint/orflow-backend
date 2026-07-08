@@ -46,3 +46,11 @@ class PortalPaymentRead(BaseModel):
 
 class PortalUpdateCardRequest(BaseModel):
     payment_token: str
+
+
+# ── Verify checkout (callback redirect) ───────────────────────────────────────
+
+class VerifyCheckoutResponse(BaseModel):
+    success: bool
+    status: str  # "paid" | "open" | "failed"
+    subscription_id: uuid.UUID | None = None
