@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.context import current_is_test
 
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)
 
 
 async def enqueue_webhook_event(
