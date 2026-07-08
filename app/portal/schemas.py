@@ -54,3 +54,5 @@ class VerifyCheckoutResponse(BaseModel):
     success: bool
     status: str  # "paid" | "open" | "failed"
     subscription_id: uuid.UUID | None = None
+    portal_token_slug: str | None = None
+    customer_name: str | None = None
