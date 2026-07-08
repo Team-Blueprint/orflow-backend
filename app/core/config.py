@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     NOMBA_CLIENT_ID: str = ""
     NOMBA_CLIENT_SECRET: str = ""
     NOMBA_ACCOUNT_ID: str = ""
+    NOMBA_SUB_ACCOUNT_ID: str = ""
     NOMBA_CALLBACK_URL: str = "https://orflow.vercel.app/portal"
     NOMBA_HTTP_TIMEOUT: float = 30.0
     NOMBA_TOKEN_LEEWAY_SECONDS: int = 300
