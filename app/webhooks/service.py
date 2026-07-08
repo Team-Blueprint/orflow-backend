@@ -35,19 +35,29 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
     # Nomba echoes back the orderReference we sent (invoice.id) in
     # transaction.merchantTxRef for tokenized-card/tokenized-card-payment events,
     # and in data.order.orderReference for the hosted-checkout callback.
-    order_reference = (
-        transaction_data.get("merchantTxRef")
-        or order_data.get("orderReference")
-    )
+    order_reference = None
+    for candidate in (
+        order_data.get("orderReference"),
+        transaction_data.get("merchantTxRef"),
+    ):
+        if candidate:
+            try:
+                UUID(candidate)
+                order_reference = candidate
+                break
+            except ValueError:
+                continue
+
     if not order_reference:
-        logger.error("Webhook missing merchantTxRef / orderReference — cannot identify invoice")
+        logger.error(
+            "Webhook missing a valid UUID orderReference — "
+            "order.orderReference=%r transaction.merchantTxRef=%r",
+            order_data.get("orderReference"),
+            transaction_data.get("merchantTxRef"),
+        )
         return
 
-    try:
-        invoice_id = UUID(order_reference)
-    except ValueError:
-        logger.error(f"Invalid order reference UUID: {order_reference!r}")
-        return
+    invoice_id = UUID(order_reference)
 
     # Find the invoice
     stmt = select(Invoice).where(Invoice.id == invoice_id)

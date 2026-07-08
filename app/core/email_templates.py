@@ -14,7 +14,7 @@ def get_invoice_receipt_template(
     paid_at_str: str
 ) -> str:
     """Returns the HTML template for an invoice receipt using Jinja2."""
-    template = env.get_template("invoice_receipt.html")
+    template = env.get_template("invoice-receipt.html")
     return template.render(
         customer_name=customer_name,
         invoice_id=invoice_id,

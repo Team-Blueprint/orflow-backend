@@ -161,7 +161,8 @@ async def deliver_webhook_job(ctx: Dict[str, Any], event_id: uuid.UUID):
         endpoints_result = await session.execute(
             select(WebhookEndpoint).where(
                 WebhookEndpoint.tenant_id == event.tenant_id,
-                WebhookEndpoint.is_active.is_(True)
+                WebhookEndpoint.is_active.is_(True),
+                WebhookEndpoint.is_test == event.is_test,
             )
         )
         endpoints = endpoints_result.scalars().all()

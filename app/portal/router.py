@@ -135,8 +135,13 @@ async def verify_checkout(
     db: AsyncSession = Depends(get_async_db),
 ):
     # Find the invoice by order reference
+    try:
+        order_uuid = uuid.UUID(orderReference)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid orderReference format")
+
     inv_result = await db.execute(
-        select(Invoice).where(Invoice.id == orderReference)
+        select(Invoice).where(Invoice.id == order_uuid)
     )
     invoice = inv_result.scalar_one_or_none()
     if not invoice:

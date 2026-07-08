@@ -13,14 +13,16 @@ Event catalog
     invoice.paid, invoice.payment_failed, invoice.voided
 """
 
-from __future__ import annotations
+from future import annotations
 
 import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
+from app.core.context import current_is_test
+
+logger = logging.getLogger(name)
 
 
 async def enqueue_webhook_event(
@@ -29,14 +31,18 @@ async def enqueue_webhook_event(
     tenant_id: uuid.UUID,
     event_type: str,
     payload: dict | None = None,
-    is_test: bool = False,
+    is_test: bool | None = None,
 ) -> None:
     """Queue an outbound webhook event for ``tenant_id``.
 
     ``is_test`` mirrors the API key environment that triggered the event.
+    When omitted (the common case), the value is read from the
+    ``current_is_test`` ContextVar set by ``TenantAuthMiddleware``.
     Events with ``is_test=True`` are only delivered to endpoints registered
     with a test-mode key; live events go only to live endpoints.
     """
+    if is_test is None:
+        is_test = current_is_test.get()
     logger.info(
         "Outbound webhook queued: %s tenant=%s is_test=%s payload=%s",
         event_type,

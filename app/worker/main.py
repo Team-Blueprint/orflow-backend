@@ -3,7 +3,7 @@ from arq.cron import cron
 from arq.connections import RedisSettings
 
 from app.db.database import engine
-from app.providers.deps import init_payment_provider, close_payment_provider
+from app.providers.deps import init_payment_providers, close_payment_providers
 from app.worker.billing_cycle import process_billing_cycle
 from app.dunning.worker import process_dunning_retries, process_unpaid_grace
 
@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 async def startup(ctx):
     logger.info("Initializing worker resources...")
-    await init_payment_provider()
+    await init_payment_providers()
 
 async def shutdown(ctx):
     logger.info("Shutting down worker resources...")
-    await close_payment_provider()
+    await close_payment_providers()
     await engine.dispose()
 
 class WorkerSettings:

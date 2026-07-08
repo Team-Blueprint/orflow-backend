@@ -39,13 +39,14 @@ async def init_payment_providers() -> None:
     _live_client = httpx.AsyncClient()
     _live_provider = NombaProvider(_live_client, settings=default_settings)
 
-    # Sandbox provider (uses NOMBA_SANDBOX_* credentials from .env)
+    # Sandbox provider (uses NOMBA_SANDBOX_* credentials from .env).
+    # NOMBA_SANDBOX_ACCOUNT_ID falls back to NOMBA_ACCOUNT_ID if not separately set.
     sandbox_settings = Settings(
         NOMBA_BASE_URL=default_settings.NOMBA_SANDBOX_BASE_URL,
         NOMBA_CLIENT_ID=default_settings.NOMBA_SANDBOX_CLIENT_ID,
         NOMBA_CLIENT_SECRET=default_settings.NOMBA_SANDBOX_CLIENT_SECRET,
-        NOMBA_ACCOUNT_ID=default_settings.NOMBA_ACCOUNT_ID,
-        NOMBA_SUB_ACCOUNT_ID=default_settings.NOMBA_SUB_ACCOUNT_ID,
+        NOMBA_ACCOUNT_ID=default_settings.NOMBA_SANDBOX_ACCOUNT_ID or default_settings.NOMBA_ACCOUNT_ID,
+        NOMBA_SUBACCOUNT_ID=default_settings.NOMBA_SANDBOX_SUBACCOUNT_ID or default_settings.NOMBA_SUBACCOUNT_ID,
         NOMBA_CALLBACK_URL=default_settings.NOMBA_SANDBOX_CALLBACK_URL,
         # Inherit all non-Nomba settings (timeouts, JWT, DB, etc.)
         NOMBA_HTTP_TIMEOUT=default_settings.NOMBA_HTTP_TIMEOUT,

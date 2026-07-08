@@ -4,14 +4,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/dbname"
     REDIS_URL: str = "redis://localhost:6379"
+    BACKEND_URL: str = "https://orflow-backend.onrender.com"
 
     # Sandbox/production base URL. Override per environment via .env.
     NOMBA_BASE_URL: str = "https://api.nomba.com"
     NOMBA_CLIENT_ID: str = ""
     NOMBA_CLIENT_SECRET: str = ""
     NOMBA_ACCOUNT_ID: str = ""
-    NOMBA_SUB_ACCOUNT_ID: str = ""
-    NOMBA_CALLBACK_URL: str = "https://orflow.vercel.app/portal/access/"
+    # Sub-account ID for branded checkouts/transfers (shows team name to recipients).
+    # When set, order.accountId uses this instead of NOMBA_ACCOUNT_ID.
+    # Register the webhook URL on this sub-account in the Nomba dashboard.
+    # Leave empty to fall back to the parent account (NOMBA_ACCOUNT_ID).
+    NOMBA_SUBACCOUNT_ID: str = ""
+    NOMBA_CALLBACK_URL: str = "https://orflow.vercel.app/portal"
     NOMBA_HTTP_TIMEOUT: float = 30.0
     NOMBA_TOKEN_LEEWAY_SECONDS: int = 300
     NOMBA_WEBHOOK_SECRET: str = ""
@@ -21,7 +26,11 @@ class Settings(BaseSettings):
     NOMBA_SANDBOX_BASE_URL: str = "https://api-sandbox.nomba.com"
     NOMBA_SANDBOX_CLIENT_ID: str = ""
     NOMBA_SANDBOX_CLIENT_SECRET: str = ""
-    NOMBA_SANDBOX_CALLBACK_URL: str = "https://orflow.vercel.app/portal/access/"
+    # Sandbox account ID — Nomba sandbox uses a separate account from live.
+    # Defaults to NOMBA_ACCOUNT_ID if not set (safe for single-account setups).
+    NOMBA_SANDBOX_ACCOUNT_ID: str = ""
+    NOMBA_SANDBOX_SUBACCOUNT_ID: str = ""
+    NOMBA_SANDBOX_CALLBACK_URL: str = "https://orflow.vercel.app/portal"
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "https://orflow.vercel.app/api/auth/google/callback"
