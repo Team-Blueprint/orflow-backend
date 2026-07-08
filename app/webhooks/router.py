@@ -21,7 +21,7 @@ def _safe(val: object) -> str:
     if val is None:
         return ""
     s = str(val)
-    if s == "null":
+    if s.lower() == "null":
         return ""
     return s
 
@@ -29,20 +29,25 @@ def _safe(val: object) -> str:
 async def verify_nomba_signature(
     request: Request,
     nomba_signature: str = Header("", alias="nomba-signature"),
+    nomba_sig_value: str = Header("", alias="nomba-sig-value"),
     nomba_timestamp: str = Header("", alias="nomba-timestamp"),
 ):
+    # Prefer nomba-sig-value (newer header) if present, fall back to nomba-signature.
+    # Both carry the same value today; Nomba docs note the version may evolve.
+    effective_signature = nomba_sig_value or nomba_signature
+
     logger.info(
         "Nomba webhook received: path=%s method=%s sig_prefix=%s ts=%s",
         request.url.path,
         request.method,
-        nomba_signature[:16] if nomba_signature else "none",
+        effective_signature[:16] if effective_signature else "none",
         nomba_timestamp,
     )
 
     headers_dict = dict(request.headers)
     logger.info("Nomba webhook headers: %s", headers_dict)
 
-    if not nomba_signature or not nomba_timestamp:
+    if not effective_signature or not nomba_timestamp:
         raise HTTPException(status_code=400, detail="Missing Nomba signature headers")
 
     if not settings.NOMBA_WEBHOOK_SECRET:
@@ -83,10 +88,10 @@ async def verify_nomba_signature(
 
     logger.info(
         "Nomba webhook signature: received=%s computed=%s match=%s",
-        nomba_signature, computed, hmac.compare_digest(computed, nomba_signature),
+        effective_signature, computed, hmac.compare_digest(computed, effective_signature),
     )
 
-    if not hmac.compare_digest(computed, nomba_signature):
+    if not hmac.compare_digest(computed, effective_signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
 
     # Parse and attach the validated payload to request.state so the endpoint
@@ -107,7 +112,7 @@ async def nomba_webhook(
     payload: NombaWebhookPayload = request.state.nomba_payload
     # Use requestId from the body as the idempotency key (it is the stable unique
     # identifier Nomba documents; fall back to nomba-signature if absent).
-    event_id = payload.requestId or request.headers.get("nomba-signature", "")
+    event_id = payload.requestId or request.headers.get("nomba-sig-value") or request.headers.get("nomba-signature", "")
 
     logger.info(
         "Nomba webhook parsed payload: event_id=%s event_type=%s requestId=%s data=%s",
