@@ -1,7 +1,9 @@
 import logging
+from urllib.parse import urlparse
 from arq.cron import cron
 from arq.connections import RedisSettings
 
+from app.core.config import settings
 from app.db.database import engine
 from app.providers.deps import init_payment_providers, close_payment_providers
 from app.worker.billing_cycle import process_billing_cycle
@@ -57,4 +59,11 @@ class WorkerSettings:
     ]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings(host='localhost', port=6379)
+    _redis = urlparse(settings.REDIS_URL)
+    redis_settings = RedisSettings(
+        host=_redis.hostname or 'localhost',
+        port=_redis.port or 6379,
+        password=_redis.password,
+        database=int(_redis.path[1:]) if _redis.path and _redis.path != '/' else 0,
+        ssl=_redis.scheme == 'rediss',
+    )
