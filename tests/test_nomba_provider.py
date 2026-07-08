@@ -7,11 +7,15 @@ import pytest
 
 from app.core.config import Settings
 from app.providers.base import (
+    DirectDebitMandateResult,
     FailureReason,
+    MandateDebitResult,
+    MandateStatusResult,
     PaymentStatus,
     ProviderAuthError,
     ProviderTimeoutError,
     ProviderUnavailableError,
+    TokenizedCard,
 )
 from app.providers.nomba import (
     NombaProvider,
@@ -253,3 +257,183 @@ async def test_5xx_raises_provider_unavailable(provider, router):
             token="tok", amount_minor=1000, currency="NGN",
             idempotency_key="inv-x:1", customer_email="a@b.com",
         )
+
+
+# -------------------------------------------------------- list_tokenized_cards
+
+async def test_list_tokenized_cards_empty(provider, router):
+    router.set("GET", "/v1/checkout/tokenized-card-data", {
+        "code": "00", "description": "Success",
+        "data": {"nextPage": 0, "tokenizedCardDataList": []},
+    })
+    result = await provider.list_tokenized_cards()
+    assert result == []
+
+
+async def test_list_tokenized_cards_returns_cards(provider, router):
+    router.set("GET", "/v1/checkout/tokenized-card-data", {
+        "code": "00", "description": "Success",
+        "data": {
+            "nextPage": 0,
+            "tokenizedCardDataList": [
+                {
+                    "tokenKey": "tok-1",
+                    "customerEmail": "a@b.com",
+                    "cardType": "VISA",
+                    "cardPan": "412345******0123",
+                    "tokenExpirationDate": "2027-12-31",
+                },
+                {
+                    "tokenKey": "tok-2",
+                    "customerEmail": "b@c.com",
+                    "cardType": "MASTERCARD",
+                    "cardPan": "512345******0456",
+                    "tokenExpirationDate": "2028-06-30",
+                },
+            ],
+        },
+    })
+    result = await provider.list_tokenized_cards(customer_email="a@b.com")
+    assert len(result) == 2
+    assert result[0].token_key == "tok-1"
+    assert result[0].customer_email == "a@b.com"
+    assert result[0].card_type == "VISA"
+    assert result[0].card_pan == "412345******0123"
+    assert isinstance(result[0], TokenizedCard)
+    assert result[1].token_key == "tok-2"
+
+
+async def test_list_tokenized_cards_passes_query_params(provider, router):
+    router.set("GET", "/v1/checkout/tokenized-card-data", {
+        "code": "00", "description": "Success",
+        "data": {"nextPage": 1, "tokenizedCardDataList": []},
+    })
+    await provider.list_tokenized_cards(
+        customer_email="x@y.com", start_date="2026-01-01",
+        end_date="2026-06-30", page=0,
+    )
+    last = router.requests[-1]
+    assert last.url.path == "/v1/checkout/tokenized-card-data"
+    assert last.url.params["customerEmail"] == "x@y.com"
+    assert last.url.params["startDate"] == "2026-01-01"
+    assert last.url.params["endDate"] == "2026-06-30"
+    assert last.url.params["page"] == "0"
+
+
+# ----------------------------------------------------- create_direct_debit_mandate
+
+async def test_create_direct_debit_mandate_success(provider, router):
+    router.set("POST", "/v1/direct-debits", {
+        "responseCode": "00", "responseMessage": "Mandate created successfully",
+        "data": {
+            "mandateId": "md-1",
+            "merchantReference": "ref-123",
+            "phoneNumber": "08012345678",
+            "description": "Mandate created successfully",
+        },
+    })
+    result = await provider.create_direct_debit_mandate(
+        customer_account_number="0123456789",
+        bank_code="011",
+        customer_name="John Doe",
+        customer_account_name="John Doe",
+        amount_minor=500000,
+        currency="NGN",
+        frequency="MONTHLY",
+        merchant_reference="ref-123",
+        start_date="2026-08-01",
+        end_date="2027-08-01",
+        customer_email="john@example.com",
+    )
+    assert isinstance(result, DirectDebitMandateResult)
+    assert result.mandate_id == "md-1"
+    assert result.merchant_reference == "ref-123"
+    assert result.phone_number == "08012345678"
+
+    body = router.last_body()
+    assert body["customerAccountNumber"] == "0123456789"
+    assert body["amount"] == "5000.00"
+    assert body["frequency"] == "MONTHLY"
+
+
+async def test_create_direct_debit_mandate_failure_raises(provider, router):
+    router.set("POST", "/v1/direct-debits", {
+        "responseCode": "99", "responseMessage": "Validation failed",
+        "data": {},
+    })
+    with pytest.raises(Exception):
+        await provider.create_direct_debit_mandate(
+            customer_account_number="0123456789",
+            bank_code="011",
+            customer_name="John Doe",
+            customer_account_name="John Doe",
+            amount_minor=500000,
+            currency="NGN",
+            frequency="MONTHLY",
+            merchant_reference="ref-123",
+            start_date="2026-08-01",
+            end_date="2027-08-01",
+            customer_email="john@example.com",
+        )
+
+
+# -------------------------------------------------------------- debit_mandate
+
+async def test_debit_mandate_success(provider, router):
+    router.set("POST", "/v1/direct-debits/debit-mandate", {
+        "code": "00", "description": "Success",
+        "data": {"mandateId": "md-1", "status": "SUCCESS", "amount": "5000.00",
+                 "message": "Debit successful"},
+        "message": "Success", "status": True,
+    })
+    result = await provider.debit_mandate(
+        mandate_id="md-1", amount_minor=500000, currency="NGN",
+    )
+    assert isinstance(result, MandateDebitResult)
+    assert result.mandate_id == "md-1"
+    assert result.status is PaymentStatus.success
+    assert result.amount_minor == 500000
+
+    body = router.last_body()
+    assert body["mandateId"] == "md-1"
+    assert body["amount"] == "5000.00"
+
+
+async def test_debit_mandate_failure(provider, router):
+    router.set("POST", "/v1/direct-debits/debit-mandate", {
+        "code": "51", "description": "Insufficient balance",
+        "data": {"mandateId": "md-1", "status": "FAILED", "amount": "5000.00",
+                 "message": "Insufficient balance"},
+        "message": "Insufficient balance", "status": False,
+    })
+    result = await provider.debit_mandate(
+        mandate_id="md-1", amount_minor=500000, currency="NGN",
+    )
+    assert result.status is PaymentStatus.failed
+
+
+# ------------------------------------------------------------ get_mandate_status
+
+async def test_get_mandate_status_active(provider, router):
+    router.set("GET", "/v1/direct-debits/status", {
+        "code": "00", "description": "Success", "message": "Success",
+        "status": True,
+        "data": {
+            "customerAccountName": "John Doe",
+            "mandateId": "md-1",
+            "customerAccountNumber": "0123456789",
+            "mandateStatus": "ACTIVE",
+            "rejectionComment": "",
+            "mandateAdviceStatus": "SUCCESS",
+        },
+    })
+    result = await provider.get_mandate_status(mandate_id="md-1")
+    assert isinstance(result, MandateStatusResult)
+    assert result.mandate_id == "md-1"
+    assert result.customer_account_name == "John Doe"
+    assert result.customer_account_number == "0123456789"
+    assert result.mandate_status == "ACTIVE"
+
+    last = router.requests[-1]
+    assert last.url.path == "/v1/direct-debits/status"
+    assert last.url.params["mandateId"] == "md-1"

@@ -23,13 +23,17 @@ from app.core.config import Settings, settings as default_settings
 from app.providers.base import (
     ChargeResult,
     CheckoutSession,
+    DirectDebitMandateResult,
     FailureReason,
+    MandateDebitResult,
+    MandateStatusResult,
     PaymentProviderAdapter,
     PaymentStatus,
     ProviderAuthError,
     ProviderError,
     ProviderTimeoutError,
     ProviderUnavailableError,
+    TokenizedCard,
     TransactionStatus,
     TransferResult,
 )
@@ -169,6 +173,7 @@ class NombaProvider(PaymentProviderAdapter):
         path: str,
         *,
         json: dict | None = None,
+        params: dict | None = None,
         headers: dict | None = None,
         expected_auth: bool = True,
     ) -> dict:
@@ -182,7 +187,7 @@ class NombaProvider(PaymentProviderAdapter):
         url = self._settings.NOMBA_BASE_URL.rstrip("/") + path
         try:
             response = await self._client.request(
-                method, url, json=json, headers=headers,
+                method, url, json=json, params=params, headers=headers,
                 timeout=self._settings.NOMBA_HTTP_TIMEOUT,
             )
         except httpx.TimeoutException as exc:
@@ -205,7 +210,7 @@ class NombaProvider(PaymentProviderAdapter):
             ) from exc
 
     async def _authed_request(
-        self, method: str, path: str, *, json: dict | None = None
+        self, method: str, path: str, *, json: dict | None = None, params: dict | None = None
     ) -> dict:
         """Authenticated request with a one-shot token refresh on 401."""
         token = await self._ensure_token()
@@ -214,13 +219,13 @@ class NombaProvider(PaymentProviderAdapter):
             "accountId": self._settings.NOMBA_ACCOUNT_ID,
         }
         try:
-            return await self._raw_request(method, path, json=json, headers=headers)
+            return await self._raw_request(method, path, json=json, params=params, headers=headers)
         except ProviderAuthError:
             # Token may have been revoked/expired early — refresh once and retry.
             self._token = None
             token = await self._ensure_token()
             headers["Authorization"] = f"Bearer {token}"
-            return await self._raw_request(method, path, json=json, headers=headers)
+            return await self._raw_request(method, path, json=json, params=params, headers=headers)
 
     # ----------------------------------------------------------------- methods
 
@@ -326,6 +331,41 @@ class NombaProvider(PaymentProviderAdapter):
             raw=body,
         )
 
+    async def list_tokenized_cards(
+        self,
+        *,
+        customer_email: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        page: int | None = None,
+    ) -> list[TokenizedCard]:
+        query: dict = {}
+        if customer_email:
+            query["customerEmail"] = customer_email
+        if start_date:
+            query["startDate"] = start_date
+        if end_date:
+            query["endDate"] = end_date
+        if page is not None:
+            query["page"] = str(page)
+
+        body = await self._authed_request(
+            "GET", "/v1/checkout/tokenized-card-data", params=query or None,
+        )
+
+        data = (body or {}).get("data") or {}
+        raw_list: list[dict] = data.get("tokenizedCardDataList") or []
+        return [
+            TokenizedCard(
+                token_key=item.get("tokenKey", ""),
+                customer_email=item.get("customerEmail"),
+                card_type=item.get("cardType"),
+                card_pan=item.get("cardPan"),
+                token_expiration_date=item.get("tokenExpirationDate"),
+            )
+            for item in raw_list
+        ]
+
     async def transfer(
         self,
         *,
@@ -418,6 +458,116 @@ class NombaProvider(PaymentProviderAdapter):
             amount_minor=_major_to_minor(order.get("amount")),
             failure_reason=failure_reason,
             message=message,
+            raw=body,
+        )
+
+    async def create_direct_debit_mandate(
+        self,
+        *,
+        customer_account_number: str,
+        bank_code: str,
+        customer_name: str,
+        customer_account_name: str,
+        amount_minor: int,
+        currency: str,
+        frequency: str,
+        merchant_reference: str,
+        start_date: str,
+        end_date: str,
+        customer_email: str,
+        customer_address: str | None = None,
+        narration: str | None = None,
+        customer_phone_number: str | None = None,
+        start_immediately: bool | None = None,
+    ) -> DirectDebitMandateResult:
+        payload: dict = {
+            "customerAccountNumber": customer_account_number,
+            "bankCode": bank_code,
+            "customerName": customer_name,
+            "customerAccountName": customer_account_name,
+            "amount": _minor_to_major_str(amount_minor),
+            "frequency": frequency.upper(),
+            "merchantReference": merchant_reference,
+            "startDate": start_date,
+            "endDate": end_date,
+            "customerEmail": customer_email,
+        }
+        if customer_address:
+            payload["customerAddress"] = customer_address
+        if narration:
+            payload["narration"] = narration
+        if customer_phone_number:
+            payload["customerPhoneNumber"] = customer_phone_number
+        if start_immediately is not None:
+            payload["startImmediately"] = start_immediately
+
+        body = await self._authed_request("POST", "/v1/direct-debits", json=payload)
+        data = (body or {}).get("data") or {}
+
+        if (body or {}).get("code") == _SUCCESS_CODE:
+            return DirectDebitMandateResult(
+                mandate_id=data.get("mandateId", ""),
+                merchant_reference=data.get("merchantReference"),
+                phone_number=data.get("phoneNumber"),
+                description=data.get("description"),
+                raw=body,
+            )
+
+        raise ProviderError(
+            f"Nomba mandate creation failed: "
+            f"(code={body.get('code')!r}, message={body.get('description')!r})."
+        )
+
+    async def debit_mandate(
+        self,
+        *,
+        mandate_id: str,
+        amount_minor: int,
+        currency: str,
+    ) -> MandateDebitResult:
+        body = await self._authed_request(
+            "POST", "/v1/direct-debits/debit-mandate",
+            json={
+                "mandateId": mandate_id,
+                "amount": _minor_to_major_str(amount_minor),
+                "currency": currency,
+            },
+        )
+        code = (body or {}).get("code")
+        description = (body or {}).get("description")
+        data = (body or {}).get("data") or {}
+        status_bool = (body or {}).get("status") is True
+
+        if code == _SUCCESS_CODE and status_bool:
+            payment_status = PaymentStatus.success
+        else:
+            payment_status = PaymentStatus.failed
+
+        return MandateDebitResult(
+            mandate_id=data.get("mandateId") or mandate_id,
+            status=payment_status,
+            amount_minor=amount_minor,
+            message=data.get("message") or description,
+            raw=body,
+        )
+
+    async def get_mandate_status(
+        self,
+        *,
+        mandate_id: str,
+    ) -> MandateStatusResult:
+        body = await self._authed_request(
+            "GET", f"/v1/direct-debits/{mandate_id}",
+        )
+        data = (body or {}).get("data") or {}
+
+        return MandateStatusResult(
+            mandate_id=data.get("mandateId", ""),
+            customer_account_name=data.get("customerAccountName"),
+            customer_account_number=data.get("customerAccountNumber"),
+            mandate_status=data.get("mandateStatus"),
+            rejection_comment=data.get("rejectionComment"),
+            mandate_advice_status=data.get("mandateAdviceStatus"),
             raw=body,
         )
 

@@ -83,10 +83,52 @@ class TransactionStatus(BaseModel):
     """Result of verifying/requerying a previously initiated transaction."""
 
     status: PaymentStatus
-    provider_reference: str | None = None
+    provider_reference: str | None = None  # store on PaymentAttempt for reconciliation
     amount_minor: int | None = None  # smallest currency unit, matching the engine
     failure_reason: FailureReason | None = None
     message: str | None = None
+    raw: dict = Field(default_factory=dict)
+
+
+class TokenizedCard(BaseModel):
+    """A card tokenized by Nomba for future recurring charges."""
+
+    token_key: str
+    customer_email: str | None = None
+    card_type: str | None = None
+    card_pan: str | None = None
+    token_expiration_date: str | None = None
+
+
+class DirectDebitMandateResult(BaseModel):
+    """Result of creating a direct debit mandate."""
+
+    mandate_id: str
+    merchant_reference: str | None = None
+    phone_number: str | None = None
+    description: str | None = None
+    raw: dict = Field(default_factory=dict)
+
+
+class MandateDebitResult(BaseModel):
+    """Result of debiting a direct debit mandate."""
+
+    mandate_id: str | None = None
+    status: PaymentStatus
+    amount_minor: int | None = None
+    message: str | None = None
+    raw: dict = Field(default_factory=dict)
+
+
+class MandateStatusResult(BaseModel):
+    """Current status of a direct debit mandate."""
+
+    mandate_id: str
+    customer_account_name: str | None = None
+    customer_account_number: str | None = None
+    mandate_status: str | None = None
+    rejection_comment: str | None = None
+    mandate_advice_status: str | None = None
     raw: dict = Field(default_factory=dict)
 
 
@@ -170,6 +212,70 @@ class PaymentProviderAdapter(ABC):
         that don't override this method don't break.
         """
         return []
+
+    async def list_tokenized_cards(
+        self,
+        *,
+        customer_email: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        page: int | None = None,
+    ) -> list[TokenizedCard]:
+        """Fetch all tokenized cards (optionally filtered by customer/date).
+
+        Default implementation raises ``NotImplementedError`` so every adapter
+        only implements what it supports.
+        """
+        raise NotImplementedError
+
+    async def create_direct_debit_mandate(
+        self,
+        *,
+        customer_account_number: str,
+        bank_code: str,
+        customer_name: str,
+        customer_account_name: str,
+        amount_minor: int,
+        currency: str,
+        frequency: str,
+        merchant_reference: str,
+        start_date: str,
+        end_date: str,
+        customer_email: str,
+        customer_address: str | None = None,
+        narration: str | None = None,
+        customer_phone_number: str | None = None,
+        start_immediately: bool | None = None,
+    ) -> DirectDebitMandateResult:
+        """Create a direct debit mandate (customer consent to debit their bank).
+
+        Default implementation raises ``NotImplementedError``.
+        """
+        raise NotImplementedError
+
+    async def debit_mandate(
+        self,
+        *,
+        mandate_id: str,
+        amount_minor: int,
+        currency: str,
+    ) -> MandateDebitResult:
+        """Charge a customer's bank account via an active direct debit mandate.
+
+        Default implementation raises ``NotImplementedError``.
+        """
+        raise NotImplementedError
+
+    async def get_mandate_status(
+        self,
+        *,
+        mandate_id: str,
+    ) -> MandateStatusResult:
+        """Fetch the current status of a direct debit mandate.
+
+        Default implementation raises ``NotImplementedError``.
+        """
+        raise NotImplementedError
 
 
 class ProviderError(Exception):
