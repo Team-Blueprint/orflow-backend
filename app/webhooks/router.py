@@ -54,9 +54,6 @@ async def verify_nomba_signature(
         raise HTTPException(status_code=500, detail="Webhook secret not configured")
 
     payload_bytes = await request.body()
-    payload_str = payload_bytes.decode("utf-8")
-    logger.info("Nomba webhook raw body: %s", payload_str)
-
     try:
         body = json.loads(payload_bytes)
     except json.JSONDecodeError:
@@ -80,16 +77,10 @@ async def verify_nomba_signature(
         f"{transaction_id}:{transaction_type}:{transaction_time}:"
         f"{response_code}:{nomba_timestamp}"
     )
-    logger.info("Nomba webhook hashing payload: %s", hashing_payload)
 
     secret_bytes = settings.NOMBA_WEBHOOK_SECRET.encode("utf-8")
     digest = hmac.new(secret_bytes, hashing_payload.encode("utf-8"), hashlib.sha256).digest()
     computed = base64.b64encode(digest).decode()
-
-    logger.info(
-        "Nomba webhook signature: received=%s computed=%s match=%s",
-        effective_signature, computed, hmac.compare_digest(computed, effective_signature),
-    )
 
     if not hmac.compare_digest(computed, effective_signature):
         raise HTTPException(status_code=401, detail="Invalid signature")
