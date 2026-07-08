@@ -13,7 +13,7 @@ Event catalog
     invoice.paid, invoice.payment_failed, invoice.voided
 """
 
-from future import annotations
+from __future__ import annotations
 
 import logging
 import uuid
