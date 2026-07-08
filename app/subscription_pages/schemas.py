@@ -86,7 +86,7 @@ class PublicPageInfo(BaseModel):
     currency: str
     interval: PlanInterval
     interval_count: int
-    merchant_name: str
+    project_name: str
     is_test: bool
 
     @field_validator("amount", mode="before")

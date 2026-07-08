@@ -1,14 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_async_db
+from app.invoices.models import Invoice, InvoiceStatus
 from app.providers.deps import get_payment_provider_for_mode
+from app.providers.base import PaymentStatus
 from app.core.context import current_is_test
 from app.core.deps import _require_project, _require_tenant
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 from app.projects.models import Project
+from app.subscriptions.models import Subscription
 from app.subscriptions.schemas import (
     ChangePlanRequest,
     ChangePlanResponse,
@@ -18,6 +22,7 @@ from app.subscriptions.schemas import (
     SubscriptionRead,
     SubscriptionWithPlanRead,
     SubscriptionAuditLogRead,
+    VerifyCheckoutMerchantResponse,
 )
 from app.subscriptions.service import SubscriptionService
 
@@ -201,4 +206,58 @@ async def list_subscribers(
         _project.id, plan_id=plan_id, offset=offset, limit=limit
     )
     return [SubscriberRead.from_db(c, subs_map.get(c.id, [])) for c in customers]
+
+
+public_router = APIRouter(
+    prefix="/subscriptions",
+    tags=["subscriptions"],
+)
+
+
+@public_router.get(
+    "/verify-checkout",
+    response_model=VerifyCheckoutMerchantResponse,
+    summary="Verify checkout payment by order reference (merchant)",
+    description="Public endpoint to verify the status of a checkout transaction. No authentication required.",
+)
+async def verify_checkout_merchant(
+    order_reference: str,
+    session: AsyncSession = Depends(get_async_db),
+):
+    try:
+        order_uuid = uuid.UUID(order_reference)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid orderReference format")
+
+    inv_result = await session.execute(
+        select(Invoice).where(Invoice.id == order_uuid)
+    )
+    invoice = inv_result.scalar_one_or_none()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    sub_result = await session.execute(
+        select(Subscription).where(Subscription.id == invoice.subscription_id)
+    )
+    subscription = sub_result.scalar_one_or_none()
+
+    if invoice.status == InvoiceStatus.paid:
+        status_val = "success"
+    elif invoice.status == InvoiceStatus.open:
+        provider = get_payment_provider_for_mode(invoice.is_test)
+        result = await provider.verify_checkout_transaction(order_reference=str(invoice.id))
+        if result.status == PaymentStatus.success:
+            status_val = "success"
+        elif result.status == PaymentStatus.failed:
+            status_val = "failed"
+        else:
+            status_val = "pending"
+    else:
+        status_val = "failed"
+
+    return VerifyCheckoutMerchantResponse(
+        status=status_val,
+        subscription_id=subscription.id if subscription else None,
+        metadata=subscription.custom_metadata if subscription else {},
+    )
 

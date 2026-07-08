@@ -8,6 +8,7 @@ from app.core.deps import _require_project
 from app.core.exceptions import EntityNotFoundError, ErrorResponse
 from app.db.database import get_async_db
 from app.plans.models import Plan
+from app.projects.models import Project
 
 from app.subscription_pages.models import SubscriptionPage
 from app.subscription_pages.schemas import (
@@ -21,7 +22,6 @@ from app.subscription_pages.schemas import (
     SubscriptionPageWithPlanRead,
 )
 from app.subscription_pages.service import SubscriptionPageService, public_checkout_flow
-from app.tenants.models import Tenant
 
 router = APIRouter(
     prefix="/subscription-pages",
@@ -169,12 +169,12 @@ async def get_plan_by_code(
     if not plan:
         raise EntityNotFoundError("Plan", str(page.plan_id))
 
-    tenant_result = await db.execute(
-        select(Tenant).where(Tenant.id == plan.tenant_id)
-    )
-    tenant = tenant_result.scalar_one_or_none()
-    if not tenant:
-        raise EntityNotFoundError("Tenant", str(plan.tenant_id))
+    project = None
+    if page.project_id:
+        project_result = await db.execute(
+            select(Project).where(Project.id == page.project_id)
+        )
+        project = project_result.scalar_one_or_none()
 
     return PublicPageInfo(
         id=page.id,
@@ -184,7 +184,7 @@ async def get_plan_by_code(
         currency=plan.currency,
         interval=plan.interval,
         interval_count=plan.interval_count,
-        merchant_name=tenant.name,
+        project_name=project.name if project else "Unknown",
         is_test=page.is_test,
     )
 

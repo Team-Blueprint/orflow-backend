@@ -1,12 +1,14 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.customers.models import Customer
 from app.db.repository import BaseRepository
 from app.plans.models import Plan
+from app.projects.models import Project
 from app.subscriptions.models import Subscription, SubscriptionStatus
 from app.subscriptions.schemas import (
     ChangePlanResponse,
@@ -55,15 +57,26 @@ class SubscriptionService(BaseRepository[Subscription]):
     ) -> SubscriptionCreateResponse:
         
         # 1. Fetch & validate related entities
-        customer_svc = CustomerService(self.session)
-        customer = await customer_svc.get(payload.customer_id)
-        if not customer:
-            raise EntityNotFoundError("Customer", str(payload.customer_id))
-
         plan_svc = PlanService(self.session)
         plan = await plan_svc.get(payload.plan_id)
         if not plan:
             raise EntityNotFoundError("Plan", str(payload.plan_id))
+
+        customer_svc = CustomerService(self.session)
+        if payload.customer_id:
+            customer = await customer_svc.get(payload.customer_id)
+            if not customer:
+                raise EntityNotFoundError("Customer", str(payload.customer_id))
+        elif payload.email:
+            customer = await customer_svc.get_by_email(payload.email, project_id=plan.project_id)
+            if not customer:
+                customer = await customer_svc.create(
+                    email=payload.email,
+                    name=payload.name or "",
+                    project_id=plan.project_id,
+                )
+        else:
+            raise HTTPException(status_code=400, detail="Either customer_id or email is required")
 
         payment_method = None
         if payload.payment_method_id:
@@ -71,6 +84,18 @@ class SubscriptionService(BaseRepository[Subscription]):
             payment_method = await pm_svc.get(payload.payment_method_id)
             if not payment_method:
                 raise EntityNotFoundError("PaymentMethod", str(payload.payment_method_id))
+
+        # Resolve callback_url
+        callback_url = payload.callback_url
+        if not callback_url and plan.project_id:
+            project_result = await self.session.execute(
+                select(Project).where(Project.id == plan.project_id)
+            )
+            project = project_result.scalar_one_or_none()
+            if project and project.default_callback_url:
+                callback_url = project.default_callback_url
+        if not callback_url:
+            raise HTTPException(status_code=400, detail="callback_url is required (provide directly or set project.default_callback_url)")
 
         # 2. Determine initial status and trial end
         is_trial = payload.trial or (plan.trial_period_days and plan.trial_period_days > 0)
@@ -89,12 +114,13 @@ class SubscriptionService(BaseRepository[Subscription]):
 
         # 3. Create Subscription
         subscription = await self.create(
-            customer_id=payload.customer_id,
+            customer_id=customer.id,
             plan_id=payload.plan_id,
             payment_method_id=payload.payment_method_id,
             status=initial_status,
             type=sub_type,
             trial_end=trial_end,
+            custom_metadata=payload.metadata or {},
         )
 
         if not customer.portal_token_slug:
@@ -190,6 +216,7 @@ class SubscriptionService(BaseRepository[Subscription]):
                 order_reference=str(first_invoice.id),
                 customer_id=str(customer.id),
                 tokenize_card=True,
+                callback_url=callback_url,
             )
             
             checkout_link = checkout_session.checkout_link

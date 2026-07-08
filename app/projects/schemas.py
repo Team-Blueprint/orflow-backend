@@ -12,6 +12,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    default_callback_url: str | None = None
 
 
 class ProjectRead(BaseModel):
@@ -19,6 +20,7 @@ class ProjectRead(BaseModel):
     tenant_id: uuid.UUID
     name: str
     description: str | None
+    default_callback_url: str | None
     created_at: datetime
     updated_at: datetime
 

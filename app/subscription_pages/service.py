@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.context import current_is_test, current_project_id, current_tenant_id
 from app.providers.deps import get_payment_provider_for_mode
 from app.core.exceptions import EntityNotFoundError
@@ -172,6 +173,7 @@ async def public_checkout_flow(
             order_reference=str(invoice.id),
             customer_id=str(customer.id),
             tokenize_card=True,
+            callback_url=settings.NOMBA_CALLBACK_URL,
         )
 
         await schedule_subscription_expiry(subscription.id, delay_hours=23)

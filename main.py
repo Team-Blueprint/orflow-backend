@@ -31,6 +31,7 @@ from app.customers.router import router as customers_router
 from app.plans.router import router as plans_router
 from app.payment_methods.router import router as payment_methods_router
 from app.subscriptions.router import router as subscriptions_router
+from app.subscriptions.router import public_router as subscriptions_public_router
 from app.webhooks.router import router as webhooks_router
 from app.webhooks.outbound_router import router as outbound_webhooks_router
 from app.reconciliation.router import router as reconciliation_router
@@ -91,6 +92,7 @@ app.include_router(projects_router, prefix="/v1")
 app.include_router(analytics_router, prefix="/v1")
 app.include_router(subscription_pages_router, prefix="/v1")
 app.include_router(subscription_pages_public_router, prefix="/v1")
+app.include_router(subscriptions_public_router, prefix="/v1")
 app.include_router(portal_router)
 
 @app.exception_handler(EntityNotFoundError)

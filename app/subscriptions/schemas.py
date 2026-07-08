@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from urllib.parse import urlparse
 
 from app.invoices.schemas import InvoiceRead
 from app.plans.models import PlanInterval, PlanStatus
@@ -22,17 +23,48 @@ class SubscriptionRead(BaseModel):
     trial_end: datetime | None
     canceled_at: datetime | None
     cancel_at_period_end: bool
+    metadata: dict = Field(validation_alias="custom_metadata")
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class SubscriptionCreate(BaseModel):
-    customer_id: uuid.UUID
+    customer_id: uuid.UUID | None = None
+    email: str | None = None
+    name: str | None = None
     plan_id: uuid.UUID
     payment_method_id: uuid.UUID | None = None
+    callback_url: str | None = None
+    metadata: dict | None = None
     trial: bool = False
+
+    @field_validator("callback_url")
+    @classmethod
+    def validate_callback_url(cls, v: str | None) -> str | None:
+        if v is not None:
+            parsed = urlparse(v)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("Invalid URL format")
+        return v
+
+    @field_validator("metadata")
+    @classmethod
+    def validate_metadata_depth(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return v
+        def check_depth(obj, depth=0):
+            if depth > 2:
+                raise ValueError("metadata must not exceed 2 levels of nesting")
+            if isinstance(obj, dict):
+                for val in obj.values():
+                    check_depth(val, depth + 1)
+            elif isinstance(obj, list):
+                for item in obj:
+                    check_depth(item, depth + 1)
+        check_depth(v)
+        return v
 
 
 class SubscriptionCreateResponse(BaseModel):
@@ -155,3 +187,9 @@ class SubscriberRead(BaseModel):
             created_at=customer.created_at,
             subscriptions=[SubscriptionWithPlanRead.from_db(s, customer, p) for s, p in subscriptions],
         )
+
+
+class VerifyCheckoutMerchantResponse(BaseModel):
+    status: str  # "success" | "failed" | "pending"
+    subscription_id: uuid.UUID | None = None
+    metadata: dict = {}
