@@ -46,7 +46,7 @@ class AnalyticsService:
 
     async def get_total_volume(
         self, tenant_id: UUID, project_id: UUID, is_test: bool, since_date: date
-    ) -> int:
+    ) -> float:
         query = (
             select(func.coalesce(func.sum(Invoice.amount_due), 0))
             .join(Customer, Customer.id == Invoice.customer_id)
@@ -59,7 +59,8 @@ class AnalyticsService:
             )
         )
         result = await self.db.execute(query)
-        return result.scalar() or 0
+        minor = result.scalar() or 0
+        return minor / 100
 
     async def get_revenue_chart(
         self, tenant_id: UUID, project_id: UUID, is_test: bool, since_date: date
@@ -81,7 +82,7 @@ class AnalyticsService:
             .order_by(func.date(Invoice.paid_at))
         )
         result = await self.db.execute(query)
-        return [{"date": str(row.date), "amount": row.amount} for row in result.all()]
+        return [{"date": str(row.date), "amount": row.amount / 100} for row in result.all()]
 
     async def get_currency(
         self, tenant_id: UUID, project_id: UUID, is_test: bool
