@@ -420,12 +420,16 @@ async def update_card(
     try:
         pm_svc = PaymentMethodService(db)
 
-        # Create the new payment method from the token
+        # Create the new payment method from the token.
+        # is_test must match the subscription's environment so the card is
+        # usable for the correct mode (sandbox vs live).
+        is_test = subscription.is_test if subscription else False
         pm = await pm_svc.create(
             customer_id=customer.id,
             type=PaymentMethodType.card,
             provider_token=payload.payment_token,
             is_default=False,
+            is_test=is_test,
         )
 
         # Set it as the default for this customer
