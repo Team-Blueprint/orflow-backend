@@ -48,6 +48,12 @@ class PortalUpdateCardRequest(BaseModel):
     payment_token: str
 
 
+# ── Public access lookup ──────────────────────────────────────────────────────
+
+class PortalAccessRead(BaseModel):
+    name: str
+
+
 # ── Verify checkout (callback redirect) ───────────────────────────────────────
 
 class VerifyCheckoutResponse(BaseModel):

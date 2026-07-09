@@ -24,6 +24,7 @@ from app.plans.models import Plan
 from app.webhooks.models import PaymentAttempt
 
 from app.portal.schemas import (
+    PortalAccessRead,
     PortalVerifyRequest,
     PortalVerifyResponse,
     PortalUpdatePinRequest,
@@ -54,6 +55,24 @@ async def _portal_session(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Portal session expired")
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid portal token: {exc}")
+
+
+# ── Public slug lookup ────────────────────────────────────────────────────────
+
+@router.get(
+    "/access/{token_slug}",
+    response_model=PortalAccessRead,
+    summary="Look up customer by portal token slug",
+    description="Public endpoint — no auth required. Returns the customer's name for the given portal slug.",
+)
+async def get_portal_access(
+    token_slug: str,
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer = await portal_svc.get_customer_by_slug(db, token_slug)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    return PortalAccessRead(name=customer.name)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
