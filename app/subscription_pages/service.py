@@ -122,25 +122,15 @@ async def public_checkout_flow(
         if not customer.portal_token_slug:
             import secrets
             from app.portal.service import hash_pin
-            from app.core.email import send_email_async
-            from app.core.email_templates import get_portal_access_template
 
+            # Generate and store credentials now so the slug is reserved.
+            # The portal access email is sent AFTER payment confirms (webhook handler).
             token_slug = secrets.token_urlsafe(32)
             raw_pin = str(secrets.randbelow(1000000)).zfill(6)
             customer.portal_token_slug = token_slug
             customer.portal_pin_hash = hash_pin(raw_pin)
             session.add(customer)
             await session.commit()
-            
-            html_content = get_portal_access_template(customer.name, token_slug, raw_pin)
-            try:
-                await send_email_async(
-                    to=customer.email,
-                    subject="Welcome to your Self-Service Portal",
-                    html=html_content
-                )
-            except Exception as e:
-                logger.warning("Portal access email failed for %s: %s", customer.email, e)
 
         invoice_svc = InvoiceService(session)
         now = datetime.now(timezone.utc)
