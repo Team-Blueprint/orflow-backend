@@ -16,6 +16,7 @@ Terminal states (no outgoing transitions): paid, void, uncollectible.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,8 @@ from app.audit.models import AuditEntityType
 from app.audit.service import record_transition
 from app.core.exceptions import InvalidStateTransition
 from app.invoices.models import Invoice, InvoiceStatus
+
+logger = logging.getLogger(__name__)
 
 I = InvoiceStatus
 
@@ -79,15 +82,15 @@ async def transition_invoice(
     # Send invoice receipt email if it transitioned to paid
     if new_status is I.paid:
         from app.customers.models import Customer
-        from app.worker.tasks import enqueue_email
+        from app.core.email import send_email_async
         from app.core.email_templates import get_invoice_receipt_template
-        
+
         customer = await session.get(Customer, invoice.customer_id)
         if customer:
             amount_formatted = f"{invoice.amount_due / 100:.2f}"
             subject = f"Receipt for Invoice {invoice.id}"
             paid_at_str = invoice.paid_at.strftime('%Y-%m-%d %H:%M:%S UTC') if invoice.paid_at else ''
-            
+
             html_content = get_invoice_receipt_template(
                 customer_name=customer.name,
                 invoice_id=str(invoice.id),
@@ -95,7 +98,10 @@ async def transition_invoice(
                 amount_formatted=amount_formatted,
                 paid_at_str=paid_at_str
             )
-            await enqueue_email(to=customer.email, subject=subject, html=html_content)
+            try:
+                await send_email_async(to=customer.email, subject=subject, html=html_content)
+            except Exception as e:
+                logger.warning("Invoice receipt email failed for %s: %s", customer.email, e)
     
     # Check for installment completion
     if new_status is I.paid and invoice.subscription_id:

@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "none"
     CORS_ORIGINS: str = "http://localhost:5173,https://orflow.vercel.app"
 
+    CRON_SECRET: str = ""
+
     RATE_LIMIT_DEFAULT_PER_MINUTE: int = 60
 
     RATE_LIMIT_CACHE_TTL_SECONDS: int = 300  # 5 min

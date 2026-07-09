@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -35,6 +36,8 @@ from app.providers.base import FailureReason, PaymentProviderAdapter
 from dateutil.relativedelta import relativedelta
 from app.plans.models import PlanInterval
 from app.subscriptions.models import SubscriptionType
+
+logger = logging.getLogger(__name__)
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -153,7 +156,7 @@ class SubscriptionService(BaseRepository[Subscription]):
         if not customer.portal_token_slug:
             import secrets
             from app.portal.service import hash_pin
-            from app.worker.tasks import enqueue_email
+            from app.core.email import send_email_async
             from app.core.email_templates import get_portal_access_template
 
             token_slug = secrets.token_urlsafe(32)
@@ -162,13 +165,16 @@ class SubscriptionService(BaseRepository[Subscription]):
             customer.portal_pin_hash = hash_pin(raw_pin)
             self.session.add(customer)
             await self.session.commit()
-            
+
             html_content = get_portal_access_template(customer.name, token_slug, raw_pin)
-            await enqueue_email(
-                to=customer.email,
-                subject="Welcome to your Self-Service Portal",
-                html=html_content
-            )
+            try:
+                await send_email_async(
+                    to=customer.email,
+                    subject="Welcome to your Self-Service Portal",
+                    html=html_content
+                )
+            except Exception as e:
+                logger.warning("Portal access email failed for %s: %s", customer.email, e)
         
         checkout_link = None
         order_reference = None
