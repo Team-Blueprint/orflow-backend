@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # Brevo Email Settings
     BREVO_API_KEY: str = ""
     DEFAULT_FROM_EMAIL: str = "abasiofon135@gmail.com"
+    DEFAULT_FROM_NAME: str = "Orflow"
 
     # Cookie settings
     COOKIE_SECURE: bool = True

@@ -16,7 +16,7 @@ async def send_email_async(to: str, subject: str, html: str) -> Dict[str, Any]:
         "content-type": "application/json"
     }
     payload = {
-        "sender": {"email": settings.DEFAULT_FROM_EMAIL},
+        "sender": {"name": settings.DEFAULT_FROM_NAME, "email": settings.DEFAULT_FROM_EMAIL},
         "to": [{"email": to}],
         "subject": subject,
         "htmlContent": html
