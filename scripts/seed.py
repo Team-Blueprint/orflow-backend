@@ -20,7 +20,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import AsyncSessionLocal
@@ -168,16 +168,26 @@ async def seed_revenue_history(
     Invoices 5 and 6 include failed attempt(s) before success to show dunning.
     Writes directly to the DB (bypasses state machine / email side effects).
     """
-    # Check if history already seeded
-    result = await session.execute(
-        select(Invoice).where(
+    # Clean up existing revenue data for this tenant so the seed is re-runnable
+    existing_pa = await session.execute(
+        select(PaymentAttempt.id).join(Invoice).where(
             Invoice.tenant_id == tenant.id,
             Invoice.status == InvoiceStatus.paid,
-        ).limit(1)
+        )
     )
-    if result.scalar_one_or_none():
-        print("  [skip] Revenue history already seeded")
-        return
+    existing_pa_ids = [row[0] for row in existing_pa.fetchall()]
+    if existing_pa_ids:
+        await session.execute(delete(PaymentAttempt).where(PaymentAttempt.id.in_(existing_pa_ids)))
+    existing_inv = await session.execute(
+        select(Invoice.id).where(
+            Invoice.tenant_id == tenant.id,
+            Invoice.status == InvoiceStatus.paid,
+        )
+    )
+    existing_inv_ids = [row[0] for row in existing_inv.fetchall()]
+    if existing_inv_ids:
+        await session.execute(delete(Invoice).where(Invoice.id.in_(existing_inv_ids)))
+    print("  [clean] Removed existing revenue data")
 
     # Map customer → subscription for FK
     cust_sub: dict[uuid.UUID, Subscription] = {s.customer_id: s for s in subscriptions}
@@ -246,6 +256,7 @@ async def seed_revenue_history(
                     provider_reference=f"demo_fail_{invoice.id}_{fail_num}",
                     error_message="Insufficient funds",
                     is_test=False,
+                    created_at=paid_at,
                 )
                 session.add(fail_attempt)
             invoice.attempt_count = 3
@@ -260,6 +271,7 @@ async def seed_revenue_history(
             is_retry=i == dunning_invoice_local_idx,
             provider_reference=f"demo_success_{invoice.id}",
             is_test=False,
+            created_at=paid_at,
         )
         session.add(success_attempt)
 
