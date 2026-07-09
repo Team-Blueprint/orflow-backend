@@ -17,7 +17,7 @@ from app.subscriptions.state_machine import transition_subscription
 from app.invoices.state_machine import transition_invoice
 from app.invoices.models import Invoice, InvoiceStatus
 from app.providers.deps import get_payment_provider_for_mode
-from app.providers.base import PaymentStatus
+from app.providers.base import PaymentStatus, ProviderError
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
 from app.payment_methods.service import PaymentMethodService
 from app.plans.models import Plan
@@ -492,15 +492,19 @@ async def create_update_card_checkout(
     # Use a unique order reference so this checkout can be looked up later.
     order_reference = f"card-update-{uuid.uuid4()}"
 
-    checkout = await provider.initiate_checkout(
-        amount_minor=0,
-        currency="NGN",
-        customer_email=customer.email,
-        order_reference=order_reference,
-        customer_id=str(customer.id),
-        tokenize_card=True,
-        callback_url=callback_url,
-    )
+    try:
+        checkout = await provider.initiate_checkout(
+            amount_minor=100,
+            currency="NGN",
+            customer_email=customer.email,
+            order_reference=order_reference,
+            customer_id=str(customer.id),
+            tokenize_card=True,
+            callback_url=callback_url,
+        )
+    except ProviderError as exc:
+        logger.error("create-update-card-checkout: provider error: %s", exc)
+        raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
 
     return CreateUpdateCardCheckoutResponse(
         checkout_link=checkout.checkout_link,

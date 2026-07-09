@@ -6,7 +6,7 @@ import jwt
 from app.core.context import current_tenant_id
 from app.db.database import get_async_db
 from app.customers.models import Customer
-from app.portal.service import verify_portal_token
+from app.portal.service import decode_portal_session_token
 
 _bearer = HTTPBearer(auto_error=False)
 
@@ -21,7 +21,8 @@ async def get_current_portal_customer(
         )
         
     try:
-        customer_id = verify_portal_token(credentials.credentials)
+        payload = decode_portal_session_token(credentials.credentials)
+        customer_id = payload["sub"]
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
