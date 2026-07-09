@@ -96,7 +96,8 @@ async def transition_invoice(
                 invoice_id=str(invoice.id),
                 currency=invoice.currency.upper(),
                 amount_formatted=amount_formatted,
-                paid_at_str=paid_at_str
+                paid_at_str=paid_at_str,
+                token_slug=customer.portal_token_slug or "",
             )
             try:
                 await send_email_async(to=customer.email, subject=subject, html=html_content)
