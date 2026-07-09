@@ -504,7 +504,7 @@ async def create_update_card_checkout(
         )
     except ProviderError as exc:
         logger.error("create-update-card-checkout: provider error: %s", exc)
-        raise HTTPException(status_code=502, detail="Payment provider error. Please try again.")
+        raise HTTPException(status_code=502, detail=f"Payment provider error: {exc}")
 
     return CreateUpdateCardCheckoutResponse(
         checkout_link=checkout.checkout_link,

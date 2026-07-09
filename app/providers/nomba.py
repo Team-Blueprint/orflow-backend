@@ -247,7 +247,9 @@ class NombaProvider(PaymentProviderAdapter):
             "amount": _minor_to_major_str(amount_minor),
             "currency": currency,
             "accountId": self._settings.NOMBA_SUBACCOUNT_ID or self._settings.NOMBA_ACCOUNT_ID,
-            "allowedPaymentMethods": ["Card", "Transfer"],
+            # When tokenizing a card only card-based payment is valid;
+            # including "Transfer" causes Nomba to reject the request.
+            "allowedPaymentMethods": ["Card"] if tokenize_card else ["Card", "Transfer"],
         }
         if customer_id:
             order["customerId"] = customer_id
