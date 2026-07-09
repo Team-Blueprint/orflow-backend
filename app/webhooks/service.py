@@ -208,25 +208,40 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
                         cust.card_brand = tokenized_data.cardType
                     await session.flush()
 
-            # Generate portal access credentials on first successful payment
+            # Send portal access email on first successful payment.
+            # Credentials may have been pre-generated at checkout (slug set but email not sent yet),
+            # or may be entirely new — handle both cases.
             cust_stmt = select(Customer).where(Customer.id == invoice.customer_id)
             cust = (await session.execute(cust_stmt)).scalar_one_or_none()
-            if cust and not cust.portal_token_slug:
+            if cust:
                 import bcrypt
+                from app.portal.service import send_portal_onboarding_email
+
+                # Always generate a fresh PIN — replace any pre-generated hash so they stay in sync.
                 raw_pin = str(secrets.randbelow(900000) + 100000)  # 6-digit PIN
-                cust.portal_token_slug = secrets.token_hex(32)
+                if not cust.portal_token_slug:
+                    # No slug yet (edge case: customer came in via a path that skipped checkout flow)
+                    cust.portal_token_slug = secrets.token_hex(32)
+                    logger.info(
+                        "Generated portal slug for customer %s on first payment",
+                        cust.id,
+                    )
                 cust.portal_pin_hash = bcrypt.hashpw(raw_pin.encode(), bcrypt.gensalt()).decode()
                 await session.flush()
-                logger.info(
-                    "Generated portal credentials for customer %s (slug=%s)",
-                    cust.id, cust.portal_token_slug,
+
+                # Only email on first payment — guard with subscription status check
+                # (subscription was `incomplete` before this webhook arrived)
+                is_first_payment = (
+                    subscription is not None
+                    and subscription.status == SubscriptionStatus.active  # just transitioned above
+                    and invoice.status == InvoiceStatus.paid
                 )
-                # Dispatch onboarding email via portal service
-                try:
-                    from app.portal.service import send_portal_onboarding_email
-                    await send_portal_onboarding_email(cust, raw_pin)
-                except Exception as e:
-                    logger.warning("Portal onboarding email failed for %s: %s", cust.id, e)
+                if is_first_payment:
+                    try:
+                        await send_portal_onboarding_email(cust, raw_pin)
+                        logger.info("Portal onboarding email sent to %s", cust.email)
+                    except Exception as e:
+                        logger.warning("Portal onboarding email failed for %s: %s", cust.id, e)
 
         elif payment_status == PaymentStatus.failed:
             await open_or_advance_dunning(
