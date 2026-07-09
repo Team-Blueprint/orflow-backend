@@ -31,6 +31,9 @@ from app.portal.schemas import (
     PortalSubscriptionRead,
     PortalPaymentRead,
     PortalUpdateCardRequest,
+    CreateUpdateCardCheckoutResponse,
+    ConfirmUpdateCardRequest,
+    ConfirmUpdateCardResponse,
     VerifyCheckoutResponse,
 )
 from app.portal import service as portal_svc
@@ -451,3 +454,165 @@ async def update_card(
 
     finally:
         current_tenant_id.reset(token)
+
+
+# ── Card update via fresh checkout ────────────────────────────────────────────
+
+@router.post(
+    "/subscriptions/create-update-card-checkout",
+    response_model=CreateUpdateCardCheckoutResponse,
+    summary="Create a $0 checkout to capture a fresh card token",
+    description=(
+        "Initiates a Nomba hosted checkout with amount=0 and tokenizeCard=true. "
+        "The customer completes the checkout to provide a new card, then calls "
+        "confirm-update-card with the returned order_reference."
+    ),
+)
+async def create_update_card_checkout(
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer_id = uuid.UUID(session_claims["sub"])
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+
+    cust_result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = cust_result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+
+    is_test = subscription.is_test if subscription else False
+    provider = get_payment_provider_for_mode(is_test)
+
+    from app.core.config import settings as app_settings
+    callback_url = f"{app_settings.FRONTEND_URL}/portal/card-update-callback"
+
+    # Use a unique order reference so this checkout can be looked up later.
+    order_reference = f"card-update-{uuid.uuid4()}"
+
+    checkout = await provider.initiate_checkout(
+        amount_minor=0,
+        currency="NGN",
+        customer_email=customer.email,
+        order_reference=order_reference,
+        customer_id=str(customer.id),
+        tokenize_card=True,
+        callback_url=callback_url,
+    )
+
+    return CreateUpdateCardCheckoutResponse(
+        checkout_link=checkout.checkout_link,
+        order_reference=checkout.order_reference,
+    )
+
+
+@router.post(
+    "/subscriptions/confirm-update-card",
+    response_model=ConfirmUpdateCardResponse,
+    summary="Confirm card update after Nomba checkout callback",
+    description=(
+        "After Nomba redirects back from the card-update checkout, call this with "
+        "the order_reference to extract the new token and save it as the default "
+        "payment method."
+    ),
+)
+async def confirm_update_card(
+    payload: ConfirmUpdateCardRequest,
+    session_claims: dict = Depends(_portal_session),
+    db: AsyncSession = Depends(get_async_db),
+):
+    customer_id = uuid.UUID(session_claims["sub"])
+    subscription_id = uuid.UUID(session_claims["subscription_id"])
+
+    cust_result = await db.execute(select(Customer).where(Customer.id == customer_id))
+    customer = cust_result.scalar_one_or_none()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    sub_result = await db.execute(select(Subscription).where(Subscription.id == subscription_id))
+    subscription = sub_result.scalar_one_or_none()
+
+    is_test = subscription.is_test if subscription else False
+    provider = get_payment_provider_for_mode(is_test)
+
+    # Query Nomba for the checkout transaction — tokenizedCardData is in the raw response.
+    tx = await provider.verify_checkout_transaction(order_reference=payload.order_reference)
+    raw_data = (tx.raw or {}).get("data") or {}
+    tokenized = raw_data.get("tokenizedCardData") or {}
+    token_key = tokenized.get("tokenKey", "").strip()
+
+    if not token_key or token_key == "N/A":
+        logger.warning(
+            "confirm-update-card: no tokenKey in Nomba response for order %s",
+            payload.order_reference,
+        )
+        return ConfirmUpdateCardResponse(success=False)
+
+    import re
+    card_pan = tokenized.get("cardPan", "")
+    last_four = tokenized.get("cardLast4Digits") or (
+        re.sub(r"[^\d]", "", card_pan)[-4:] if card_pan else None
+    )
+    expiry_month = None
+    expiry_year = None
+    raw_month = tokenized.get("tokenExpiryMonth", "")
+    raw_year = tokenized.get("tokenExpiryYear", "")
+    if raw_month and raw_month not in ("N/A", ""):
+        try:
+            expiry_month = int(raw_month)
+        except ValueError:
+            pass
+    if raw_year and raw_year not in ("N/A", ""):
+        try:
+            expiry_year = int(raw_year)
+        except ValueError:
+            pass
+
+    tenant_token = current_tenant_id.set(customer.tenant_id)
+    try:
+        pm_svc = PaymentMethodService(db)
+
+        # Avoid saving a duplicate token.
+        from sqlalchemy import select as sa_select
+        dup = (await db.execute(
+            sa_select(PaymentMethod).where(
+                PaymentMethod.tenant_id == customer.tenant_id,
+                PaymentMethod.customer_id == customer.id,
+                PaymentMethod.provider_token == token_key,
+            )
+        )).scalar_one_or_none()
+
+        if dup:
+            pm = dup
+        else:
+            pm = await pm_svc.create(
+                customer_id=customer.id,
+                type=PaymentMethodType.card,
+                provider_token=token_key,
+                last_four=last_four,
+                expiry_month=expiry_month,
+                expiry_year=expiry_year,
+                is_default=False,
+                is_test=is_test,
+            )
+
+        await pm_svc.set_default(pm.id)
+
+        if subscription:
+            subscription.payment_method_id = pm.id
+
+        # Update display metadata on the customer row.
+        if last_four:
+            customer.card_last4 = last_four
+        card_type = tokenized.get("cardType")
+        if card_type:
+            customer.card_brand = card_type
+
+        await db.commit()
+
+    finally:
+        current_tenant_id.reset(tenant_token)
+
+    return ConfirmUpdateCardResponse(success=True)

@@ -48,6 +48,19 @@ class PortalUpdateCardRequest(BaseModel):
     payment_token: str
 
 
+class CreateUpdateCardCheckoutResponse(BaseModel):
+    checkout_link: str
+    order_reference: str
+
+
+class ConfirmUpdateCardRequest(BaseModel):
+    order_reference: str
+
+
+class ConfirmUpdateCardResponse(BaseModel):
+    success: bool
+
+
 # ── Public access lookup ──────────────────────────────────────────────────────
 
 class PortalAccessRead(BaseModel):
