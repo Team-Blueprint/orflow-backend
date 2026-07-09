@@ -42,6 +42,25 @@ def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _compute_period_end(plan: "Plan", start: datetime) -> datetime:
+    """Return the billing period end for *plan* starting at *start*."""
+    if plan.interval == PlanInterval.daily:
+        delta = relativedelta(days=plan.interval_count)
+    elif plan.interval == PlanInterval.weekly:
+        delta = relativedelta(weeks=plan.interval_count)
+    elif plan.interval == PlanInterval.monthly:
+        delta = relativedelta(months=plan.interval_count)
+    elif plan.interval == PlanInterval.quarterly:
+        delta = relativedelta(months=3 * plan.interval_count)
+    elif plan.interval in (PlanInterval.yearly, PlanInterval.annually):
+        delta = relativedelta(years=plan.interval_count)
+    elif plan.interval == PlanInterval.biannually:
+        delta = relativedelta(months=6 * plan.interval_count)
+    else:
+        delta = relativedelta(months=plan.interval_count)
+    return start + delta
+
+
 class SubscriptionService(BaseRepository[Subscription]):
     """
     Tenant-scoped repository for subscriptions.
@@ -103,12 +122,18 @@ class SubscriptionService(BaseRepository[Subscription]):
         initial_status = SubscriptionStatus.incomplete
         trial_end = None
         
+        trial_period_start = None
+        trial_period_end = None
         if payment_method and payment_method.type == PaymentMethodType.bank_transfer:
             initial_status = SubscriptionStatus.active
         elif is_trial:
             initial_status = SubscriptionStatus.trialing
             trial_days = plan.trial_period_days or 14
-            trial_end = datetime.now(timezone.utc) + timedelta(days=trial_days)
+            now_utc = datetime.now(timezone.utc)
+            trial_end = now_utc + timedelta(days=trial_days)
+            # The trial window is the first billing period for display purposes.
+            trial_period_start = now_utc
+            trial_period_end = trial_end
 
         sub_type = SubscriptionType.installment if plan.installments_count else SubscriptionType.recurring
 
@@ -120,6 +145,8 @@ class SubscriptionService(BaseRepository[Subscription]):
             status=initial_status,
             type=sub_type,
             trial_end=trial_end,
+            current_period_start=trial_period_start,
+            current_period_end=trial_period_end,
             custom_metadata=payload.metadata or {},
         )
 

@@ -17,13 +17,17 @@ class AnalyticsService:
     async def get_active_subscribers(
         self, tenant_id: UUID, project_id: UUID, is_test: bool
     ) -> int:
+        # Join through both Customer and Plan so the subscription must have its
+        # customer AND its plan in the requested project.
         query = (
             select(func.count(func.distinct(Subscription.id)))
+            .join(Customer, Customer.id == Subscription.customer_id)
             .join(Plan, Plan.id == Subscription.plan_id)
             .where(
                 Subscription.tenant_id == tenant_id,
                 Subscription.is_test == is_test,
                 Subscription.status == SubscriptionStatus.active,
+                Customer.project_id == project_id,
                 Plan.project_id == project_id,
             )
         )
@@ -47,14 +51,17 @@ class AnalyticsService:
     async def get_total_volume(
         self, tenant_id: UUID, project_id: UUID, is_test: bool, since_date: date
     ) -> float:
+        # Scope invoices to the project via both the subscription's plan and the
+        # customer, matching the same ownership chain used everywhere else.
         query = (
             select(func.coalesce(func.sum(Invoice.amount_due), 0))
-            .join(Customer, Customer.id == Invoice.customer_id)
+            .join(Subscription, Subscription.id == Invoice.subscription_id)
+            .join(Plan, Plan.id == Subscription.plan_id)
             .where(
                 Invoice.tenant_id == tenant_id,
                 Invoice.is_test == is_test,
                 Invoice.status == InvoiceStatus.paid,
-                Customer.project_id == project_id,
+                Plan.project_id == project_id,
                 Invoice.paid_at >= since_date,
             )
         )
@@ -70,12 +77,13 @@ class AnalyticsService:
                 func.date(Invoice.paid_at).label("date"),
                 func.coalesce(func.sum(Invoice.amount_due), 0).label("amount"),
             )
-            .join(Customer, Customer.id == Invoice.customer_id)
+            .join(Subscription, Subscription.id == Invoice.subscription_id)
+            .join(Plan, Plan.id == Subscription.plan_id)
             .where(
                 Invoice.tenant_id == tenant_id,
                 Invoice.is_test == is_test,
                 Invoice.status == InvoiceStatus.paid,
-                Customer.project_id == project_id,
+                Plan.project_id == project_id,
                 Invoice.paid_at >= since_date,
             )
             .group_by(func.date(Invoice.paid_at))
@@ -89,12 +97,13 @@ class AnalyticsService:
     ) -> str:
         query = (
             select(Invoice.currency)
-            .join(Customer, Customer.id == Invoice.customer_id)
+            .join(Subscription, Subscription.id == Invoice.subscription_id)
+            .join(Plan, Plan.id == Subscription.plan_id)
             .where(
                 Invoice.tenant_id == tenant_id,
                 Invoice.is_test == is_test,
                 Invoice.status == InvoiceStatus.paid,
-                Customer.project_id == project_id,
+                Plan.project_id == project_id,
             )
             .order_by(Invoice.paid_at.desc())
             .limit(1)

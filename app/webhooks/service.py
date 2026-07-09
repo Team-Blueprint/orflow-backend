@@ -2,6 +2,7 @@ import logging
 import re
 import secrets
 import uuid as uuid_mod
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -18,6 +19,8 @@ from app.dunning.service import clear_dunning, open_or_advance_dunning
 from app.webhooks.outbound import enqueue_webhook_event
 from app.payment_methods.models import PaymentMethod, PaymentMethodType
 from app.customers.models import Customer
+from app.plans.models import Plan
+from app.subscriptions.service import _compute_period_end
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +116,14 @@ async def process_nomba_webhook(session: AsyncSession, event_id: str, payload: N
 
             await clear_dunning(session, invoice)
             if subscription and subscription.status in (SubscriptionStatus.incomplete, SubscriptionStatus.past_due):
+                # Set billing period on first activation (incomplete→active) or
+                # when recovering from past_due after a dunning retry.
+                now = datetime.now(timezone.utc)
+                plan_result = await session.execute(select(Plan).where(Plan.id == subscription.plan_id))
+                plan = plan_result.scalar_one_or_none()
+                if plan:
+                    subscription.current_period_start = now
+                    subscription.current_period_end = _compute_period_end(plan, now)
                 await transition_subscription(session, subscription, SubscriptionStatus.active, reason="payment_succeeded", actor="nomba_webhook")
                 await enqueue_webhook_event(
                     session,

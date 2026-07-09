@@ -74,11 +74,15 @@ async def schedule_trial_activation(subscription_id: uuid.UUID, run_at: datetime
     )
 
 async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: uuid.UUID):
+    from datetime import datetime, timezone
     from app.core.context import current_tenant_id
     from app.subscriptions.models import Subscription, SubscriptionStatus
     from app.subscriptions.state_machine import transition_subscription
     from app.payment_methods.service import PaymentMethodService
     from app.webhooks.outbound import enqueue_webhook_event
+    from app.plans.models import Plan
+    from app.subscriptions.service import _compute_period_end
+    from sqlalchemy import select
     
     logger.info("Activating trialing subscription %s", subscription_id)
     
@@ -96,6 +100,13 @@ async def activate_trial_subscription_job(ctx: Dict[str, Any], subscription_id: 
                 payment_method = await pm_svc.get(sub.payment_method_id)
 
             if payment_method and payment_method.provider_token:
+                # Start the first real billing period now that the trial is over.
+                now = datetime.now(timezone.utc)
+                plan_result = await session.execute(select(Plan).where(Plan.id == sub.plan_id))
+                plan = plan_result.scalar_one_or_none()
+                if plan:
+                    sub.current_period_start = now
+                    sub.current_period_end = _compute_period_end(plan, now)
                 await transition_subscription(session, sub, SubscriptionStatus.active, actor="trial_worker")
                 
                 await enqueue_webhook_event(
