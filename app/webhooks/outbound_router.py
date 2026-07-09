@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_async_db
-from app.core.context import current_tenant_id, current_key_type
+from app.core.context import current_key_type
+from app.core.deps import _require_tenant
 from app.webhooks import outbound_service
 from app.webhooks.schemas import (
     WebhookEndpointCreate,
@@ -17,16 +18,15 @@ from app.core.exceptions import EntityNotFoundError
 
 router = APIRouter(prefix="/webhooks", tags=["Outbound Webhooks"])
 
-def require_tenant() -> uuid.UUID:
-    tenant_id = current_tenant_id.get()
-    if not tenant_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    # Enforce sk_* key usage for endpoint management
+
+async def require_tenant(tenant_id: uuid.UUID = Depends(_require_tenant)) -> uuid.UUID:
+    # Enforce sk_* key only when the request was authenticated via API key.
+    # Cookie/JWT-authenticated dashboard users have no key_type set — allowed through.
     key_type = current_key_type.get()
-    if not key_type or not key_type.startswith("sk_"):
+    if key_type is not None and not key_type.startswith("sk_"):
         raise HTTPException(
-            status_code=403, 
-            detail="Secret key (sk_*) required for this endpoint"
+            status_code=403,
+            detail="Secret key (sk_*) required for this endpoint",
         )
     return tenant_id
 
