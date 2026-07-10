@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.core.context import current_key_type, current_is_test, current_tenant_id
+from app.core.context import current_key_type, current_is_test, current_project_id, current_tenant_id
 from app.db.database import AsyncSessionLocal
 
 # Paths that require no API key — auth endpoints, docs, health, inbound webhooks.
@@ -78,10 +78,38 @@ class TenantAuthMiddleware(BaseHTTPMiddleware):
             tenant = result.scalar_one_or_none()
 
         if tenant is None:
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Invalid or revoked API key"},
+            # Fallback to project-scoped API key lookup.
+            from app.projects.keys_models import ProjectApiKey
+
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(
+                    select(ProjectApiKey).where(
+                        ProjectApiKey.key_value == api_key,
+                        ProjectApiKey.is_active.is_(True),
+                    )
+                )
+                project_key = result.scalar_one_or_none()
+
+            if project_key is None:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or revoked API key"},
+                )
+
+            p_token = current_project_id.set(project_key.project_id)
+            t_token = current_tenant_id.set(project_key.tenant_id)
+            k_token = current_key_type.set(project_key.key_type)
+            it_token = current_is_test.set(
+                project_key.key_type.endswith("_test")
             )
+            try:
+                response = await call_next(request)
+            finally:
+                current_project_id.reset(p_token)
+                current_tenant_id.reset(t_token)
+                current_key_type.reset(k_token)
+                current_is_test.reset(it_token)
+            return response
 
         # Determine which slot matched so downstream code can enforce
         # live/test mode restrictions if needed.
