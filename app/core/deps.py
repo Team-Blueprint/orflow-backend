@@ -73,9 +73,26 @@ async def _require_project(
 
     Must be used on all project-scoped resource endpoints.
     The project must belong to the authenticated tenant.
+
+    If ``current_project_id`` is already set (by TenantAuthMiddleware when
+    a project-scoped API key is used), the ``X-Project-ID`` header is not
+    required.
     """
     if request.method == "OPTIONS":
         return None
+
+    existing_pid = current_project_id.get()
+    if existing_pid is not None:
+        result = await db.execute(
+            select(Project).where(Project.id == existing_pid, Project.tenant_id == tenant_id)
+        )
+        project = result.scalar_one_or_none()
+        if project is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+        return project
 
     project_id_str = x_project_id
     if project_id_str is None:
